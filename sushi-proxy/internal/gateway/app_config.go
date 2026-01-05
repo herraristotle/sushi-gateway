@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,6 +18,7 @@ type AppConfig struct {
 	AdminPassword   string
 	AdminCorsOrigin string
 	ConfigFilePath  string
+	JwtSecret       []byte
 }
 
 var GlobalAppConfig *AppConfig
@@ -83,6 +85,23 @@ func LoadGlobalConfig() (*AppConfig, error) {
 		errors = append(errors, "CONFIG_FILE_PATH is required.")
 	}
 
+	// JWT secret for Admin API authentication
+	// If not provided, auto-generate a secure random secret
+	var jwtSecret []byte
+	jwtSecretEnv := os.Getenv("JWT_SECRET")
+	if jwtSecretEnv != "" {
+		jwtSecret = []byte(jwtSecretEnv)
+		slog.Info("Using JWT_SECRET from environment variable")
+	} else {
+		// Auto-generate a secure 32-byte random secret
+		jwtSecret = make([]byte, 32)
+		if _, err := rand.Read(jwtSecret); err != nil {
+			errors = append(errors, "Failed to generate JWT secret: "+err.Error())
+		} else {
+			slog.Warn("JWT_SECRET not set, auto-generated a random secret. Sessions will be invalidated on restart.")
+		}
+	}
+
 	if len(errors) > 0 {
 		for _, err := range errors {
 			slog.Error(err)
@@ -99,6 +118,7 @@ func LoadGlobalConfig() (*AppConfig, error) {
 		AdminPassword:   adminPassword,
 		AdminCorsOrigin: adminCorsOrigin,
 		ConfigFilePath:  configFilePath,
+		JwtSecret:       jwtSecret,
 	}
 
 	return config, nil

@@ -18,7 +18,7 @@ export const useGatewayData = () => {
           config: config.data,
         });
       } catch (err: any) {
-        if (err.response.status !== 401) {
+        if (err.response?.status === 401) {
           navigate("/login");
         }
       }

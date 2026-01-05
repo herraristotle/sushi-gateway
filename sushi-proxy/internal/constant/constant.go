@@ -27,6 +27,7 @@ var AVAILABLE_PLUGINS = []string{
 	PLUGIN_MTLS,
 	PLUGIN_HTTP_LOG,
 	PLUGIN_CORS,
+	PLUGIN_HEADER_TRANSFORMATION,
 }
 
 const PLUGIN_RESPONSE_HANDLER = "response_handler"
@@ -40,3 +41,4 @@ const PLUGIN_JWT = "jwt"
 const PLUGIN_KEY_AUTH = "key_auth"
 const PLUGIN_MTLS = "mtls"
 const PLUGIN_HTTP_LOG = "http_log"
+const PLUGIN_HEADER_TRANSFORMATION = "header_transformation"

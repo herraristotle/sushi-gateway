@@ -19,6 +19,7 @@ func setupTestEnv(t *testing.T) func() {
 		"ADMIN_PASSWORD",
 		"ADMIN_CORS_ORIGIN",
 		"CONFIG_FILE_PATH",
+		"JWT_SECRET",
 	}
 
 	for _, env := range envVars {
@@ -56,6 +57,9 @@ func TestLoadGlobalConfig(t *testing.T) {
 	assert.Equal(t, "config.json", config.ConfigFilePath)
 	assert.Equal(t, filepath.Join(".", "server.crt"), config.ServerCertPath)
 	assert.Equal(t, filepath.Join(".", "server.key"), config.ServerKeyPath)
+	// JWT secret should be auto-generated when not provided
+	assert.NotNil(t, config.JwtSecret)
+	assert.Equal(t, 32, len(config.JwtSecret)) // Should be 32 bytes
 }
 
 func TestLoadGlobalConfig_WithCustomCerts(t *testing.T) {

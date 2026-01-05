@@ -1,0 +1,60 @@
+# Sushi Gateway Configuration (YAML Format)
+# This is equivalent to config.json but in YAML format
+
+global:
+  name: sushi-gateway-1
+  plugins:
+    - name: http_log
+      enabled: true
+      config:
+        http_endpoint: http://sushi-http-log-consumer:3000/v1/log
+        method: POST
+        content_type: application/json
+
+    - name: rate_limit
+      enabled: true
+      config:
+        limit_second: 10
+        limit_min: 10
+        limit_hour: 10
+
+services:
+  - name: sushi-svc
+    base_path: /sushi-service
+    protocol: http
+    load_balancing_strategy: round_robin
+    upstreams:
+      - host: sushi-svc-1
+        port: 3000
+      - host: sushi-svc-2
+        port: 3000
+      - host: sushi-svc-3
+        port: 3000
+    plugins: []
+    health:
+      enabled: true
+      path: /health
+    routes:
+      - name: get-sushi
+        path: /v1/sushi
+        methods:
+          - GET
+        plugins:
+          - name: rate_limit
+            enabled: true
+            config:
+              limit_second: 10
+              limit_min: 10
+              limit_hour: 100
+
+      - name: get-sushi-by-id
+        path: /v1/sushi/{id}
+        methods:
+          - GET
+        plugins: []
+
+      - name: get-sushi-restaurants
+        path: /v1/sushi/restaurant
+        methods:
+          - GET
+        plugins: []

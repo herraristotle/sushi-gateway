@@ -15,8 +15,11 @@ import (
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
 
-// TODO: externalise this
-var jwtKey = []byte("secret-jwt-key")
+// getJwtKey returns the JWT signing key from the global configuration.
+// This allows the JWT secret to be configured via environment variable.
+func getJwtKey() []byte {
+	return gateway.GlobalAppConfig.JwtSecret
+}
 
 type Claims struct {
 	Username string `json:"username"`
@@ -131,7 +134,7 @@ func generateJWT(username string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(getJwtKey())
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +144,7 @@ func generateJWT(username string) (string, error) {
 func validateJWT(tokenString string) (*Claims, *model.HttpError) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return getJwtKey(), nil
 	})
 	if err != nil {
 		return nil, model.NewHttpError(http.StatusUnauthorized, "UNAUTHORIZED_AUTH", "Invalid token")

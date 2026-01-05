@@ -43,10 +43,10 @@ func (plugin JwtPlugin) Validate() error {
 		return fmt.Errorf("alg must be a non-empty string")
 	}
 
-	// Only HS256 and RSA256 is supported for now
+	// Only HS256 and RS256 is supported for now
 	supportedJwtSigningMethods := []string{constant.HS_256, constant.RSA_256}
 	if !util.SliceContainsString(supportedJwtSigningMethods, alg) {
-		return fmt.Errorf("alg must be one of: HS256")
+		return fmt.Errorf("alg must be one of: HS256, RS256")
 	}
 
 	iss, ok := plugin.config["iss"].(string)
