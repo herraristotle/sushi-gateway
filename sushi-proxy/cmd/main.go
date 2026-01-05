@@ -11,18 +11,18 @@ import (
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/api"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/gateway"
 	"golang.org/x/sync/errgroup"
 )
 
 func main() {
 
-	// Load gateway environment config
-	loadedConfig, err := gateway.LoadGlobalConfig()
+	// Load gateway environment config (this also initializes container.Global)
+	_, err := gateway.LoadGlobalConfig()
 	if err != nil {
 		os.Exit(1)
 	}
-	gateway.GlobalAppConfig = loadedConfig
 
 	// Setup error group with cancellation context
 	errGrpCtx, cancel := context.WithCancel(context.Background())
@@ -39,7 +39,7 @@ func main() {
 	}
 
 	// Initialize HTTPS server
-	cert, err := tls.LoadX509KeyPair(gateway.GlobalAppConfig.ServerCertPath, gateway.GlobalAppConfig.ServerKeyPath)
+	cert, err := tls.LoadX509KeyPair(container.Global.AppConfig.ServerCertPath, container.Global.AppConfig.ServerKeyPath)
 	if err != nil {
 		slog.Error("Failed to load TLS keys", "error", err)
 		log.Fatal(err)
@@ -73,14 +73,14 @@ func main() {
 
 	// Initialize config file watcher
 	// Do this on gateway startup, load the config from config
-	if err := gateway.LoadProxyConfigFromConfigFile(gateway.GlobalAppConfig.ConfigFilePath); err != nil {
+	if err := gateway.LoadProxyConfigFromConfigFile(container.Global.AppConfig.ConfigFilePath); err != nil {
 		slog.Error("Failed to load initial config file", "error", err)
 		os.Exit(1)
 	}
 
 	// Start the file watcher
 	errGroup.Go(func() error {
-		return gateway.WatchConfigFile(errGrpCtx, gateway.GlobalAppConfig.ConfigFilePath)
+		return gateway.WatchConfigFile(errGrpCtx, container.Global.AppConfig.ConfigFilePath)
 	})
 
 	// Start health checker, we start the health checker before the servers start, so that we can verify the health of the services before they are proxied.

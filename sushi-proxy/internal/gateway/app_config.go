@@ -8,22 +8,12 @@ import (
 	"path/filepath"
 
 	"github.com/joho/godotenv"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 )
 
-type AppConfig struct {
-	ServerCertPath  string
-	ServerKeyPath   string
-	CACertPath      string
-	AdminUser       string
-	AdminPassword   string
-	AdminCorsOrigin string
-	ConfigFilePath  string
-	JwtSecret       []byte
-}
-
-var GlobalAppConfig *AppConfig
-
-func LoadGlobalConfig() (*AppConfig, error) {
+// LoadGlobalConfig loads configuration from environment and initializes the DI container.
+// Returns the container.AppConfig for use during startup.
+func LoadGlobalConfig() (*container.AppConfig, error) {
 	slog.Info("Loading Global application config for sushi gateway from environment variables...")
 	godotenv.Load()
 
@@ -110,7 +100,7 @@ func LoadGlobalConfig() (*AppConfig, error) {
 		return nil, fmt.Errorf("failed to load environment configuration")
 	}
 
-	config := &AppConfig{
+	config := &container.AppConfig{
 		ServerCertPath:  serverCertPath,
 		ServerKeyPath:   serverKeyPath,
 		CACertPath:      caCertPath,
@@ -120,6 +110,10 @@ func LoadGlobalConfig() (*AppConfig, error) {
 		ConfigFilePath:  configFilePath,
 		JwtSecret:       jwtSecret,
 	}
+
+	// Initialize the DI container
+	container.Initialize(config)
+	slog.Info("Initialized DI container")
 
 	return config, nil
 }

@@ -11,14 +11,13 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
-	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/gateway"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
 
-// getJwtKey returns the JWT signing key from the global configuration.
-// This allows the JWT secret to be configured via environment variable.
+// getJwtKey returns the JWT signing key from the DI container.
 func getJwtKey() []byte {
-	return gateway.GlobalAppConfig.JwtSecret
+	return container.Global.AppConfig.JwtSecret
 }
 
 type Claims struct {
@@ -116,8 +115,8 @@ func (c *AuthController) Logout() http.HandlerFunc {
 }
 
 func validate(username string, password string) bool {
-	return username == gateway.GlobalAppConfig.AdminUser &&
-		password == gateway.GlobalAppConfig.AdminPassword
+	return username == container.Global.AppConfig.AdminUser &&
+		password == container.Global.AppConfig.AdminPassword
 }
 
 func generateJWT(username string) (string, error) {
@@ -128,8 +127,9 @@ func generateJWT(username string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "sushi-gateway-admin-api",
 			Audience:  []string{"sushi-gateway-manager"},
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			Subject:   username,
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
 	}
 
@@ -152,7 +152,6 @@ func validateJWT(tokenString string) (*Claims, *model.HttpError) {
 	if !token.Valid {
 		return nil, model.NewHttpError(http.StatusUnauthorized, "UNAUTHORIZED_AUTH", "Invalid token")
 	}
-
 	return claims, nil
 }
 
@@ -161,22 +160,23 @@ func ProtectRouteUsingJWT(next http.Handler) http.Handler {
 		cookie, err := req.Cookie("token")
 		if err != nil {
 			if errors.Is(err, http.ErrNoCookie) {
-				model.NewHttpError(http.StatusUnauthorized, "UNAUTHORIZED_AUTH", "Invalid token").WriteJSONResponse(w)
+				model.NewHttpError(http.StatusUnauthorized, "UNAUTHORIZED_AUTH",
+					"Cookie not found").WriteJSONResponse(w)
 				return
 			}
-			model.NewHttpError(http.StatusBadRequest, "BAD_REQUEST", "Bad Request")
+			model.NewHttpError(http.StatusBadRequest, "BAD_REQUEST",
+				"Error getting cookie").WriteJSONResponse(w)
 			return
 		}
 
-		claims, httperr := validateJWT(cookie.Value)
-		if httperr != nil {
-			httperr.WriteJSONResponse(w)
+		claims, httpErr := validateJWT(cookie.Value)
+		if httpErr != nil {
+			httpErr.WriteJSONResponse(w)
 			return
 		}
 
-		// Store the claims in the request context for use in handlers
-		ctx := req.Context()
-		ctx = context.WithValue(ctx, "username", claims.Username)
+		// Add claims to request context
+		ctx := context.WithValue(req.Context(), "claims", claims)
 		next.ServeHTTP(w, req.WithContext(ctx))
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/gateway"
 )
 
@@ -36,7 +37,7 @@ func (c *GatewayController) GetGatewayInformation() http.HandlerFunc {
 func (c *GatewayController) GetGatewayConfig() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		slog.Info("GatewayController:: Admin API - Getting gateway configuration")
-		appConfig := gateway.GlobalAppConfig
+		appConfig := container.Global.AppConfig
 		payload, _ := json.Marshal(appConfig)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(payload)

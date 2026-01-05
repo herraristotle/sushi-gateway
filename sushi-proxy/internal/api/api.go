@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/gateway"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rs/cors"
 )
 
@@ -24,7 +24,7 @@ func NewAdminApiRouter() http.Handler {
 	healthController := NewHealthController()
 	healthController.RegisterRoutes(router)
 
-	corsOrigin := gateway.GlobalAppConfig.AdminCorsOrigin
+	corsOrigin := container.Global.AppConfig.AdminCorsOrigin
 	if corsOrigin == "" {
 		corsOrigin = DEFAULT_CORS_ORIGIN
 	}

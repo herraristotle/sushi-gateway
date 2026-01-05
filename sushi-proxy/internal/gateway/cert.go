@@ -5,6 +5,8 @@ import (
 	"log"
 	"log/slog"
 	"os"
+
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 )
 
 var GlobalCaCertPool *CertPool
@@ -16,12 +18,12 @@ type CertPool struct {
 func LoadCertPool() *CertPool {
 	// Load CA certificate to create a CA pool
 	// We didnt find any CA Certs provided to the gateway, returning an empty cert pool.
-	if GlobalAppConfig.CACertPath == "" {
+	if container.Global.AppConfig.CACertPath == "" {
 		slog.Info("CA_CERT_PATH not defined, no certs found. Skip loading client certificates.")
 		return &CertPool{}
 	}
 
-	caCert, err := os.ReadFile(GlobalAppConfig.CACertPath)
+	caCert, err := os.ReadFile(container.Global.AppConfig.CACertPath)
 	if err != nil {
 		log.Fatalf("server: read ca: %s", err)
 	}

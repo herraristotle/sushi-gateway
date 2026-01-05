@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
 
@@ -29,7 +30,7 @@ func NewMtlsPlugin(config map[string]interface{}) *Plugin {
 }
 
 func (plugin MtlsPlugin) Validate() error {
-	if GlobalAppConfig.CACertPath == "" {
+	if container.Global.AppConfig.CACertPath == "" {
 		return fmt.Errorf("CA_CERT_PATH not set, no certificates found for mtls verification")
 	}
 	return nil
