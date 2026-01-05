@@ -86,6 +86,8 @@ func (pm *PluginManager) loadConfig(pc model.PluginConfig) *model.HttpError {
 		pm.RegisterPlugin(NewCorsPlugin(pc.Config))
 	case constant.PLUGIN_HEADER_TRANSFORMATION:
 		pm.RegisterPlugin(NewHeaderTransformationPlugin(pc.Config))
+	case constant.PLUGIN_CIRCUIT_BREAKER:
+		pm.RegisterPlugin(NewCircuitBreakerPlugin(pc.Config))
 	}
 	return nil
 }
