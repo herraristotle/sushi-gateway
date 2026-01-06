@@ -15,19 +15,16 @@ import (
 )
 
 func setupMockProxyConfig() {
-	GlobalProxyConfig = model.ProxyConfig{
-		Global: model.Global{
-			Name: "test-gateway",
-			Plugins: []model.PluginConfig{
-				{
-					Id:      "plugin_1",
-					Name:    "http_log",
-					Enabled: true,
-					Config: map[string]interface{}{
-						"http_endpoint": "http://localhost:3000/v1/log",
-						"method":        "POST",
-						"content_type":  "application/json",
-					},
+	config := model.ProxyConfig{
+		Name: "test-gateway",
+		Plugins: []model.PluginConfig{
+			{
+				Id:   "plugin_1",
+				Name: "http-log",
+				Config: map[string]interface{}{
+					"http_endpoint": "http://localhost:3000/v1/log",
+					"method":        "POST",
+					"content_type":  "application/json",
 				},
 			},
 		},
@@ -39,12 +36,8 @@ func setupMockProxyConfig() {
 				LoadBalancingStrategy: model.RoundRobin,
 				Plugins:               []model.PluginConfig{},
 
-				Upstreams: []model.Upstream{
-					{
-						Id:   "upstream_id",
-						Host: "localhost",
-						Port: 8080,
-					},
+				Upstreams: []model.UpstreamTarget{
+					{Id: "upstream1", Target: "localhost:8888"},
 				},
 				Routes: []model.Route{
 					{
@@ -57,6 +50,7 @@ func setupMockProxyConfig() {
 			},
 		},
 	}
+	globalProxyConfig.Store(&config)
 }
 
 func TestHttpLogValidation(t *testing.T) {

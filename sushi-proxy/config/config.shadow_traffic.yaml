@@ -1,0 +1,27 @@
+services:
+  - name: sushi-service
+    url: http://test-svc:3000
+    routes:
+      - name: production-api
+        paths: [/v1/sushi]
+        methods: [GET, POST]
+        plugins:
+          # Shadow 10% of production traffic to test backend
+          - name: shadow_traffic
+            enabled: true
+            config:
+              target_url: http://test-backend-v2:3000  # New version being tested
+              sample_rate: 0.1  # Shadow 10% of requests
+              async: true       # Don't block main request
+              timeout: 5000     # 5 second timeout
+
+      - name: analytics-route
+        paths: [/v1/analytics]
+        plugins:
+          # Mirror ALL requests to analytics backend
+          - name: shadow_traffic
+            enabled: true
+            config:
+              target_url: http://analytics-backend:3000
+              sample_rate: 1.0  # Mirror 100%
+              async: true

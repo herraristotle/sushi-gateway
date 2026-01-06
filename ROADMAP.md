@@ -4,9 +4,9 @@
 
 ### Documentation
 
-- [ ] Create roadmap
-- [ ] Create docker compose guide
-- [ ] Developer getting started guide
+- [x] Create roadmap
+- [x] Create docker compose guide
+- [x] Developer getting started guide (VitePress docs)
 
 ### Infrastructure & Deployment
 
@@ -17,11 +17,11 @@
 ### Observability
 
 - [ ] Implement OpenTelemetry integration
-- [ ] Add Prometheus metrics
+- [x] Add Prometheus metrics
 
 ### Circuit Breaker
 
-- [ ] Implement circuit breaker pattern
+- [x] Implement circuit breaker pattern
 
 ### Load Testing
 
@@ -36,9 +36,12 @@
 
 ### Load Balancing
 
-- [ ] Implement weighted load balancing
-  - [ ] Add configuration options for weight distribution
-  - [ ] Support dynamic weight adjustments
+- [x] Implement weighted load balancing
+  - [x] Add configuration options for weight distribution
+  - [x] Support dynamic weight adjustments
+- [x] Implement Least Connections algorithm
+- [x] Implement Consistent Hashing
+- [x] Implement Latency-based Routing
 
 ### Plugin System
 
@@ -51,4 +54,37 @@
 
 ### UI Modernization
 
-- [ ] Design new UI architecture
+- [x] Design new UI architecture
+- [x] Upstreams page with real-time metrics
+- [x] Health dashboard
+
+### Protocol Support
+
+- [ ] WebSocket proxying
+- [ ] gRPC proxying
+- [ ] GraphQL support
+
+### Service Discovery
+
+- [ ] Consul integration
+- [ ] Kubernetes service discovery
+- [ ] DNS-based discovery
+
+### Advanced Features
+
+- [ ] A/B testing support
+- [ ] Traffic shadowing
+- [ ] Request/response transformations
+- [ ] Custom Lua scripting
+
+---
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+Priorities for contributors:
+1. Documentation improvements
+2. New plugins
+3. Performance optimizations
+4. Bug fixes

@@ -19,9 +19,8 @@ type BasicAuthPlugin struct {
 func NewBasicAuthPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_BASIC_AUTH,
-		Priority: 1100,
-		Phase:    AccessPhase,
-		Handler: BasicAuthPlugin{
+		Priority: 200,
+		Handler: &BasicAuthPlugin{
 			config: config,
 		},
 		Validator: BasicAuthPlugin{

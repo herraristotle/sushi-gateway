@@ -1,0 +1,106 @@
+# Sushi Gateway E2E Test Configuration - Minimal
+# Uses existing test-services/sushi-api endpoints
+
+name: sushi-gateway-e2e
+
+# =============================================================================
+# SERVICES - Backend services that Sushi Gateway proxies to
+# =============================================================================
+services:
+  # Standard Sushi Service - for proxy and load balancing testing
+  - name: sushi-svc
+    base_path: /sushi-service
+    protocol: http
+    host: sushi-upstream
+
+    health:
+      enabled: true
+      path: /health
+    routes:
+      - name: get-sushi
+        paths: [/v1/sushi]
+
+      - name: get-sushi-by-id
+        paths: ["/v1/sushi/{id}"]
+
+      - name: get-restaurants
+        paths: [/v1/sushi/restaurant]
+
+  # BFF Dashboard Service - Response Aggregation
+  - name: dashboard
+    base_path: /dashboard
+    protocol: http
+    # Aggregation uses direct backends
+    routes:
+      - name: user-dashboard
+        path: "/v1/user/{id}"
+        backends:
+          - name: sushi
+            target: user-service:3000
+            path: /v1/sushi
+            protocol: http
+            timeout_ms: 5000
+            required: true
+          - name: restaurants
+            target: order-service:3000
+            path: /v1/sushi/restaurant
+            protocol: http
+            timeout_ms: 3000
+            required: false
+          - name: health
+            target: notification-service:3000
+            path: /health
+            protocol: http
+            timeout_ms: 2000
+            required: false
+
+  # Health Service - For testing health checks
+  - name: health-check
+    base_path: /healthz
+    protocol: http
+    host: health-upstream
+    health:
+      enabled: true
+      path: /health
+    routes:
+      - name: upstream-health
+        path: /health
+
+# =============================================================================
+# PLUGINS - Centralized plugin configurations
+# =============================================================================
+plugins:
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+
+  - name: rate-limiting
+    route: get-sushi
+    config:
+      second: 3.0
+      minute: 700.0
+      hour: 1300.0
+
+  - name: cache
+    route: get-sushi
+    config:
+      ttl: 60.0
+      strategy: memory
+      key_template: "{method}:{path}"
+
+# =============================================================================
+# UPSTREAMS - Load balancer groups
+# =============================================================================
+upstreams:
+  - name: sushi-upstream
+    algorithm: round-robin
+    targets:
+      - target: sushi-svc-1:3000
+        weight: 70
+      - target: sushi-svc-2:3000
+        weight: 30
+
+  - name: health-upstream
+    targets:
+      - target: sushi-svc-1:3000

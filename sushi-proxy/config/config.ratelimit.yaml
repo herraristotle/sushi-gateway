@@ -1,0 +1,5 @@
+name: sushi-gateway-ratelimit-test
+
+services: []
+upstreams: []
+plugins: []

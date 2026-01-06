@@ -29,9 +29,8 @@ type CorsPlugin struct {
 func NewCorsPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_CORS,
-		Priority: 2000,
-		Phase:    AccessPhase,
-		Handler: CorsPlugin{
+		Priority: 0, // Very High Priority
+		Handler: &CorsPlugin{
 			config: config,
 		},
 		Validator: CorsPlugin{

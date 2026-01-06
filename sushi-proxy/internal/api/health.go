@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 type HealthController struct {
@@ -15,8 +15,8 @@ func NewHealthController() *HealthController {
 	return &HealthController{}
 }
 
-func (c *HealthController) RegisterRoutes(router *mux.Router) {
-	router.Path("/healthz").Methods("GET").Handler(c.CheckHealth())
+func (c *HealthController) RegisterRoutes(router chi.Router) {
+	router.Get("/healthz", c.CheckHealth())
 }
 
 func (c *HealthController) CheckHealth() http.HandlerFunc {

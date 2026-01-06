@@ -1,58 +1,138 @@
-# Load Balancing
+# Load Balancing Algorithms
 
-Load balancing in Sushi Gateway ensures that incoming API requests are distributed efficiently across upstream servers. It improves performance, reliability, and fault tolerance by managing how traffic is routed to backend services.
+Sushi Gateway supports multiple load balancing algorithms with full Kong parity, each optimized for different use cases.
 
-## Supported Load Balancing Algorithms
+## Overview
 
-Sushi Gateway supports the following load balancing strategies:
+| Algorithm | Use Case | Complexity | Kong Parity |
+|-----------|----------|------------|-------------|
+| Round Robin | General purpose | O(1) | ✅ |
+| Least Connections | Connection-heavy workloads | O(log N) | ✅ |
+| Consistent Hashing | Session affinity | O(log N) | ✅ |
+| Latency-based EWMA | Performance-critical | O(N) | ✅ |
 
-### Round Robin
+---
 
-- **Description**: Distributes requests sequentially across all available upstreams.
-- **Use Case**: Suitable for scenarios with equally capable upstreams and evenly distributed workloads.
+## Round Robin
 
-### Weighted _(In Progress)_
+Distributes requests evenly across all healthy upstreams in a circular manner.
 
-- **Description**: Distributes requests based on predefined weights assigned to each upstream.
-- **Use Case**: Ideal for scenarios where some upstreams have higher capacity or priority.
-
-### IP Hash
-
-- **Description**: Routes requests based on the client’s IP address, ensuring consistent upstream selection for the same client via a consistent hash ring.
-- **Use Case**: Useful for maintaining session persistence (sticky sessions).
-
-## Example Configuration
-
-Here’s an example of configuring load balancing in a `config.json` file:
-
-```json
-{
-  "name": "example-service",
-  "base_path": "/example",
-  "protocol": "http",
-  "load_balancing_strategy": "round_robin",
-  "upstreams": [
-    { "id": "upstream_1", "host": "example-app-1", "port": 3000 },
-    { "id": "upstream_2", "host": "example-app-2", "port": 3001 }
-  ]
-}
+```yaml
+services:
+  - name: api-service
+    load_balancing_strategy: round-robin
+    upstreams:
+      - target: localhost:8080
+        weight: 100
+      - target: localhost:8081
+        weight: 200  # Gets 2x more requests
 ```
 
-### Explanation
+**Weight Support**: Upstreams with higher weights receive proportionally more traffic.
 
-- **`load_balancing_strategy`**: Defines the strategy to use (`round_robin`, `weighted`, or `ip_hash`).
-- **`upstreams`**: Lists the backend servers to which requests are distributed.
+---
 
-::: tip
-Use `round_robin` for balanced traffic distribution when all upstreams have similar capacity.
-:::
+## Least Connections
 
-## Choosing the Right Strategy
+Routes to the upstream with fewest active connections.
 
-The appropriate load balancing strategy depends on your use case:
+```yaml
+services:
+  - name: api-service
+    load_balancing_strategy: least-connections
+    upstreams:
+      - target: localhost:8080
+        weight: 100
+```
 
-| Strategy    | Best For                                                   |
-| ----------- | ---------------------------------------------------------- |
-| Round Robin | Uniform upstreams with similar capabilities.               |
-| Weighted    | Upstreams with varying capacity or priorities.             |
-| IP Hash     | Scenarios requiring session persistence (sticky sessions). |
+**Implementation**:
+- Binary min-heap for 10+ upstreams (O(log N))
+- Linear scan for <10 upstreams (O(N))
+- Score: `(connections + 1) / weight`
+
+**Best For**: Long-lived connections, WebSocket, streaming
+
+---
+
+## Consistent Hashing
+
+Routes based on hash key for session affinity.
+
+```yaml
+services:
+  - name: api-service
+    load_balancing_strategy: consistent-hashing
+    upstreams:
+      - target: localhost:8080
+        hash_on: consumer        # Hash source
+        hash_on_cookie: session_id
+        hash_on_header: X-User-ID
+```
+
+**Hash Sources** (priority order):
+1. Consumer ID
+2. Header value
+3. Cookie value
+4. Path
+5. Query parameter
+6. IP address (default)
+
+---
+
+## Latency-based EWMA
+
+Routes to fastest upstream based on exponentially weighted moving average.
+
+```yaml
+services:
+  - name: api-service
+    load_balancing_strategy: latency
+    upstreams:
+      - target: localhost:8080
+        weight: 100
+```
+
+**Features**:
+- EWMA decay: 0.2 (20% new, 80% historical)
+- Slow-start protection for new upstreams
+- Weight-aware scoring: `EWMA / weight`
+
+**Best For**: Performance-critical apps, heterogeneous upstreams
+
+---
+
+## Retry Tracking
+
+All algorithms automatically avoid failed upstreams during retries.
+
+```yaml
+services:
+  - name: api-service
+    retry_attempts: 3
+```
+
+---
+
+## Monitoring
+
+Track algorithm performance:
+- **Admin API**: `/api/stats` for real-time metrics
+- **UI**: `/upstreams` and `/health` pages
+- **Prometheus**: `/metrics` endpoint
+
+**Key Metrics**:
+- `active_connections`
+- `ewma_latency_ms`
+- `health_status`
+
+---
+
+## Best Practices
+
+1. Start with `round-robin`
+2. Use weights for capacity differences
+3. Enable health checks for failover
+4. Monitor distribution via `/api/stats`
+5. Test failover scenarios
+
+See the [complete load balancing guide](./load-balancing-detailed.md) for advanced configuration.

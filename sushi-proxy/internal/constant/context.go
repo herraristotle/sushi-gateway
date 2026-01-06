@@ -13,4 +13,7 @@ const (
 	CONTEXT_RESPONSE_SIZE    = "response_size"
 	CONTEXT_RESPONSE_STATUS  = "response_status"
 	CONTEXT_RESPONSE_HEADERS = "response_headers"
+
+	// Authentication
+	CONTEXT_CONSUMER_ID = "consumer_id"
 )

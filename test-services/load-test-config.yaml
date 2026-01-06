@@ -1,0 +1,90 @@
+name: "sushi-gateway-load-test"
+service_defaults:
+  protocol: http
+  connect_timeout: 5000
+  write_timeout: 5000
+  read_timeout: 5000
+  admin_port: 8001
+
+services:
+  # 1. Round Robin (Weighted)
+  - name: service-weighted
+    base_path: /weighted
+    protocol: http
+    load_balancing_strategy: round-robin
+    routes:
+      - name: weighted-catch-all
+        path: /v1/sushi/restaurant/1
+    upstreams:
+      - target: sushi-api-1:3000
+        weight: 100
+      - target: sushi-api-2:3000
+        weight: 300
+
+  # 2. Least Connections
+  - name: service-least-conn
+    base_path: /least-conn
+    protocol: http
+    load_balancing_strategy: least-connections
+    routes:
+      - name: least-conn-catch-all
+        path: /delay
+    upstreams:
+      - target: sushi-api-1:3000
+        weight: 100
+      - target: sushi-api-2:3000
+        weight: 100
+
+  # 3. Latency EWMA
+  - name: service-latency
+    base_path: /latency
+    protocol: http
+    load_balancing_strategy: latency
+    routes:
+      - name: latency-catch-all
+        path: /v1/sushi/restaurant/1
+    upstreams:
+      - target: sushi-api-1:3000
+        weight: 100
+      - target: sushi-api-2:3000
+        weight: 100
+
+  # 4. Consistent Hashing
+  - name: service-hash
+    base_path: /hash
+    protocol: http
+    load_balancing_strategy: consistent-hashing
+    routes:
+      - name: hash-catch-all
+        path: /v1/sushi/restaurant/1
+    upstreams:
+      - target: sushi-api-1:3000
+        hash_on: header
+        hash_on_header: "X-User-ID"
+      - target: sushi-api-2:3000
+        hash_on: header
+        hash_on_header: "X-User-ID"
+
+  # 5. Stress Test (Max Throughput)
+  - name: service-stress
+    base_path: /stress
+    protocol: http
+    load_balancing_strategy: round-robin
+    routes:
+      - name: stress-catch-all
+        path: /v1/sushi/restaurant/1
+    upstreams:
+      - target: sushi-api-3:3000
+        weight: 100
+
+  # 6. Massive Stress Cluster (10 replicas)
+  - name: service-stress-cluster
+    base_path: /stress-50k
+    protocol: http
+    load_balancing_strategy: round-robin
+    routes:
+      - name: cluster-catch-all
+        path: /v1/sushi/restaurant/1
+    upstreams:
+      - target: sushi-api-stress:3000
+        weight: 100

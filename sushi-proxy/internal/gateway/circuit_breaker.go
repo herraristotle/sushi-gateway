@@ -7,39 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sony/gobreaker"
+
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
 
-// CircuitState represents the state of the circuit breaker
-type CircuitState int
-
-const (
-	CircuitClosed   CircuitState = iota // Normal operation, requests flow through
-	CircuitOpen                         // Failing, reject requests immediately
-	CircuitHalfOpen                     // Testing recovery, allow limited requests
-)
-
-func (s CircuitState) String() string {
-	switch s {
-	case CircuitClosed:
-		return "closed"
-	case CircuitOpen:
-		return "open"
-	case CircuitHalfOpen:
-		return "half-open"
-	default:
-		return "unknown"
-	}
-}
-
-// CircuitBreaker tracks the state of each service's circuit
+// CircuitBreaker wrapper around gobreaker
 type CircuitBreaker struct {
-	state           CircuitState
-	failures        int
-	successes       int
-	lastFailureTime time.Time
-	mutex           sync.RWMutex
+	cb *gobreaker.CircuitBreaker
 }
 
 // Global circuit breakers map - keyed by service name
@@ -47,7 +23,14 @@ var circuitBreakers = make(map[string]*CircuitBreaker)
 var circuitBreakersMutex = sync.RWMutex{}
 
 // getOrCreateCircuitBreaker gets or creates a circuit breaker for a service
-func getOrCreateCircuitBreaker(serviceName string) *CircuitBreaker {
+// We need the config here to initialize it properly if it doesn't exist.
+// Since we might not have config when just "getting", this design assumes
+// initialization happens via middleware or we use defaults.
+// For the plugin architecture, we'll initialize with defaults if missing,
+// but the Execute method will have access to the config to update/re-create if needed
+// (though re-creating is expensive/tricky for state).
+// A better approach for this plugin: we use a single config per service.
+func getOrCreateCircuitBreaker(serviceName string, failureThreshold int, successThreshold int, timeout time.Duration) *CircuitBreaker {
 	circuitBreakersMutex.Lock()
 	defer circuitBreakersMutex.Unlock()
 
@@ -55,9 +38,26 @@ func getOrCreateCircuitBreaker(serviceName string) *CircuitBreaker {
 		return cb
 	}
 
+	st := gobreaker.Settings{
+		Name:        serviceName,
+		MaxRequests: uint32(successThreshold), // Half-open success threshold
+		Interval:    0,                        // Clear counts only on success/failure, not time
+		Timeout:     timeout,                  // Open -> Half-Open timeout
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			// Trip when failures >= threshold
+			shouldTrip := counts.ConsecutiveFailures >= uint32(failureThreshold)
+			if shouldTrip {
+				slog.Warn("Circuit breaker tripping", "service", serviceName, "failures", counts.ConsecutiveFailures)
+			}
+			return shouldTrip
+		},
+		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+			slog.Info("Circuit breaker state change", "service", name, "from", from, "to", to)
+		},
+	}
+
 	cb := &CircuitBreaker{
-		state:    CircuitClosed,
-		failures: 0,
+		cb: gobreaker.NewCircuitBreaker(st),
 	}
 	circuitBreakers[serviceName] = cb
 	return cb
@@ -71,7 +71,6 @@ func NewCircuitBreakerPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_CIRCUIT_BREAKER,
 		Priority: 100, // Execute early to fail fast
-		Phase:    AccessPhase,
 		Handler: CircuitBreakerPlugin{
 			config: config,
 		},
@@ -121,78 +120,49 @@ func (plugin CircuitBreakerPlugin) Execute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get service name from request context or path
 		serviceName := getServiceNameFromRequest(r)
-		cb := getOrCreateCircuitBreaker(serviceName)
 
 		failureThreshold, successThreshold, timeout := plugin.getConfig()
 
-		cb.mutex.Lock()
+		// Get or create the CP with the current config
+		cb := getOrCreateCircuitBreaker(serviceName, failureThreshold, successThreshold, timeout)
 
-		// Check if we should transition from Open to Half-Open
-		if cb.state == CircuitOpen {
-			if time.Since(cb.lastFailureTime) > timeout {
-				slog.Info("Circuit breaker transitioning to half-open", "service", serviceName)
-				cb.state = CircuitHalfOpen
-				cb.successes = 0
+		// Execute the request via the circuit breaker
+		_, err := cb.cb.Execute(func() (interface{}, error) {
+			// Create a response recorder to capture the response status
+			recorder := &responseRecorder{
+				ResponseWriter: w,
+				statusCode:     http.StatusOK,
 			}
-		}
 
-		// If circuit is open, reject immediately
-		if cb.state == CircuitOpen {
-			cb.mutex.Unlock()
-			slog.Warn("Circuit breaker OPEN - rejecting request", "service", serviceName)
-			model.NewHttpError(http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE",
-				"Service temporarily unavailable (circuit breaker open)").WriteJSONResponse(w)
-			return
-		}
+			// Execute the next handler
+			next.ServeHTTP(recorder, r)
 
-		cb.mutex.Unlock()
-
-		// Create a response recorder to capture the response status
-		recorder := &responseRecorder{
-			ResponseWriter: w,
-			statusCode:     http.StatusOK,
-		}
-
-		// Execute the next handler
-		next.ServeHTTP(recorder, r)
-
-		// Update circuit breaker state based on response
-		cb.mutex.Lock()
-		defer cb.mutex.Unlock()
-
-		if isFailureStatus(recorder.statusCode) {
-			cb.failures++
-			cb.lastFailureTime = time.Now()
-			cb.successes = 0
-
-			slog.Debug("Circuit breaker recorded failure",
-				"service", serviceName,
-				"failures", cb.failures,
-				"threshold", failureThreshold)
-
-			if cb.failures >= failureThreshold {
-				slog.Warn("Circuit breaker OPENING", "service", serviceName, "failures", cb.failures)
-				cb.state = CircuitOpen
+			// Check if the response was a failure
+			if isFailureStatus(recorder.statusCode) {
+				return nil, fmt.Errorf("upstream failure: %d", recorder.statusCode)
 			}
-		} else {
-			// Success
-			if cb.state == CircuitHalfOpen {
-				cb.successes++
-				slog.Debug("Circuit breaker recorded success in half-open",
-					"service", serviceName,
-					"successes", cb.successes,
-					"threshold", successThreshold)
 
-				if cb.successes >= successThreshold {
-					slog.Info("Circuit breaker CLOSING - service recovered", "service", serviceName)
-					cb.state = CircuitClosed
-					cb.failures = 0
-					cb.successes = 0
-				}
-			} else {
-				// Reset failures on success in closed state
-				cb.failures = 0
+			return nil, nil
+		})
+
+		// Handle circuit breaker errors (Open state or Too Many Requests)
+		if err != nil {
+			// If it's an error we returned from the function (upstream failure),
+			// the response is already written by next.ServeHTTP, so we don't do anything.
+			// However, gobreaker returns the error from our closure.
+
+			// If the error is gobreaker.ErrOpenState or gobreaker.ErrTooManyRequests,
+			// it means the block wasn't executed, so we need to return 503.
+			if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
+				slog.Warn("Circuit breaker rejected request", "service", serviceName, "error", err)
+				model.NewHttpError(http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE",
+					"Service temporarily unavailable (circuit breaker open)").WriteJSONResponse(w)
+				return
 			}
+
+			// For other errors (which are just the upstream failures we propagated to trip the breaker),
+			// the response has already been written to the recorder -> w.
+			// So we technically don't need to do anything else here.
 		}
 	})
 }

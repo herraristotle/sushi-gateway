@@ -18,9 +18,8 @@ type MtlsPlugin struct {
 func NewMtlsPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_MTLS,
-		Priority: 1600,
-		Phase:    AccessPhase,
-		Handler: MtlsPlugin{
+		Priority: 250, // Priority?
+		Handler: &MtlsPlugin{
 			config: config,
 		},
 		Validator: MtlsPlugin{

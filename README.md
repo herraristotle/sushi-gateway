@@ -14,9 +14,7 @@
 
 ![Stars](https://img.shields.io/github/stars/rawsashimi1604/sushi-gateway?style=flat-square) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/rawsashimi1604/sushi-gateway?style=flat-square) ![Docker Pulls](https://img.shields.io/docker/pulls/rawsashimi/sushi-proxy?style=flat-square) ![Version](https://img.shields.io/github/v/release/rawsashimi1604/sushi-gateway?color=green&label=Version&style=flat-square) ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**Sushi Gateway** is a lightweight and extensible Layer 7 API Gateway designed to empower developers with seamless control, robust security, and dynamic adaptability.
-
-By providing functionality such as routing, load balancing, authentication, and plugins, Sushi Gateway enables effortless orchestration of microservices and APIs.
+**Sushi Gateway** is a production-ready, lightweight API Gateway built in Go. It provides enterprise-grade features like distributed rate limiting, response caching, BFF pattern support, and Prometheus metrics—comparable to Kong, KrakenD, and Tyk.
 
 ---
 
@@ -24,56 +22,195 @@ By providing functionality such as routing, load balancing, authentication, and 
 
 ---
 
-## Roadmap
+## ✨ Key Features
 
-See the [Roadmap](ROADMAP.md) for more information on the project's future direction.
+| Category | Features |
+|----------|----------|
+| **Routing** | Dynamic paths, header-based routing, canary deployments |
+| **Load Balancing** | Round-robin, Least-connections, Consistent-hashing, Latency EWMA |
+| **Rate Limiting** | Distributed (Redis), per-second/minute/hour, X-RateLimit headers |
+| **Caching** | Response caching with Redis, Cache-Control support, X-Cache headers |
+| **BFF Pattern** | Response aggregation from multiple backends in parallel |
+| **Security** | mTLS, JWT, API Key, Basic Auth, RBAC (Casbin), Bot Protection |
+| **Resilience** | Circuit breaker (gobreaker), retry with exponential backoff |
+| **Observability** | OpenTelemetry, Prometheus `/metrics`, JSON structured logging |
 
-## Features
+## 🚀 Quick Start
 
-- **Dynamic Routing**: Route traffic efficiently with support for dynamic paths and advanced match criteria.
-- **Plugin System**: Extend functionality with modular plugins for security, rate limiting, logging, and more.
-- **Load Balancing**: Built-in strategies like round robin, weighted (in progress), and IP hash.
-- **Declarative Configuration**: Use declarative JSON configurations to configure the gateway.
-- **Secure API Management**: Features such as Mutual TLS, API key authentication, and JWT support.
-- **Lightweight & Efficient**: Optimized for speed and scalability with a minimal footprint.
+### Using Docker Compose
 
-## Quick Start
+```bash
+# Clone the repository
+git clone https://github.com/rawsashimi1604/sushi-gateway.git
+cd sushi-gateway
 
-View our quick start guide using Docker [here](https://rawsashimi1604.github.io/sushi-gateway/getting-started/docker.html).
+# Start Redis + Gateway + Test Services
+docker compose -f docker-compose.e2e.yml up --build
+```
 
-## Plugins
+### Environment Variables
 
-Sushi Gateway offers a wide range of plugins to enhance functionality, including:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CONFIG_FILE_PATH` | ✅ | Path to gateway config (YAML/JSON) |
+| `ADMIN_USER` | ✅ | Admin API username |
+| `ADMIN_PASSWORD` | ✅ | Admin API password |
+| `REDIS_ADDR` | ✅ | Redis address (e.g., `localhost:6379`) |
+| `REDIS_PASSWORD` | ❌ | Redis password (optional) |
 
-| Plugin Name              | Description                           |
-| ------------------------ | ------------------------------------- |
-| **Rate Limit**           | Limit requests per user/service.      |
-| **CORS**                 | Enable cross-origin resource sharing. |
-| **JWT Authentication**   | Secure APIs with JWT tokens.          |
-| **Basic Authentication** | Simplify API access control.          |
-| **Bot Protection**       | Block malicious user agents.          |
+### Ports
 
-Explore all available plugins in the **[Plugins Documentation](https://rawsashimi1604.github.io/sushi-gateway/plugins)**.
+| Port | Purpose |
+|------|---------|
+| `8080` | HTTP Proxy |
+| `8443` | HTTPS Proxy |
+| `8081` | Admin API + Prometheus Metrics |
 
-## Contributing
+### Admin API Endpoints
 
-We ❤️ contributions! Check out the [Contributing Guide](CONTRIBUTING.md) to get started.
+| Endpoint | Description |
+|----------|-------------|
+| `/api/gateway` | Gateway configuration |
+| `/api/health` | Upstream health status |
+| `/api/stats` | Load balancing metrics |
+| `/metrics` | Prometheus metrics |
 
-- **Join the Community**: Share feedback and ask questions in our [Discussions](https://github.com/rawsashimi1604/sushi-gateway/discussions).
-- **Chat on Discord**: Collaborate and discuss on our [Discord Channel](https://discord.gg/aPv4QhQ6).
-- **Report Issues**: Open issues directly in the [GitHub repository](https://github.com/rawsashimi1604/sushi-gateway/issues).
+## 📦 Plugins
 
-[sushi-url]: https://rawsashimi1604.github.io/sushi-gateway/
+| Plugin | Description |
+|--------|-------------|
+| `rate_limit` | Distributed rate limiting with Redis |
+| `cache` | Response caching with TTL |
+| `jwt` | JWT token validation |
+| `basic_auth` | Basic authentication |
+| `key_auth` | API key authentication |
+| `acl` | IP whitelist/blacklist |
+| `cors` | Cross-origin resource sharing |
+| `circuit_breaker` | Fault tolerance with gobreaker |
+| `rbac` | Role-based access control (Casbin) |
+| `sanitization` | Request sanitization (XSS, SQL injection) |
+| `bot_protection` | Block bad bots |
+| `header_transformation` | Modify request/response headers |
+| `http_log` | Send logs to HTTP endpoint |
+| `mtls` | Mutual TLS for upstreams |
 
-## Building Sushi Gateway
+## 🔀 Response Aggregation (BFF Pattern)
 
-- Ensure you have Go installed with at least version 1.22.
-- Look up the [Quick Start](https://rawsashimi1604.github.io/sushi-gateway/getting-started/docker.html) guide to get the config file, certs and keys required for the gateway to run.
-- Create the certs and keys required for the gateway to run.
-- Create the config file for the gateway to run.
-- Build and run the gateway using the following commands:
-  - `go run cmd/main.go`
-- To run tests use the following command:
-  - `go test ./...`
-- Use the `docker-compose.yml` file to quickly start up dev servers to test proxy
-  - `docker compose up -d`
+Aggregate multiple backend responses into a single response:
+
+```yaml
+routes:
+  - name: user-dashboard
+    path: /v1/user/{id}
+    methods: [GET]
+    backends:
+      - name: user
+        host: user-service
+        port: 3000
+        path: /users/{id}
+        required: true
+      - name: orders
+        host: order-service
+        port: 3000
+        path: /orders/{id}
+        required: false
+      - name: notifications
+        host: notification-service
+        port: 3000
+        path: /notifications/{id}
+        required: false
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "user": { "name": "John" },
+    "orders": [...],
+    "notifications": { "count": 5 }
+  },
+  "_meta": {
+    "total_backends": 3,
+    "successful_calls": 3,
+    "total_duration_ms": 45
+  }
+}
+```
+
+## 📊 Prometheus Metrics
+
+Access metrics at `http://localhost:8081/metrics`:
+
+```promql
+# Request rate
+rate(sushi_gateway_requests_total[5m])
+
+# Cache hit ratio
+rate(sushi_gateway_cache_hits_total[5m]) / 
+(rate(sushi_gateway_cache_hits_total[5m]) + rate(sushi_gateway_cache_misses_total[5m]))
+
+# Rate limit violations
+rate(sushi_gateway_rate_limit_hits_total[5m])
+```
+
+## 🧪 E2E Testing
+
+```bash
+# Run E2E tests with Docker Compose
+docker compose -f docker-compose.e2e.yml up --build
+
+# View test results
+docker compose -f docker-compose.e2e.yml logs e2e-tests
+```
+
+## 🏗️ Building from Source
+
+```bash
+# Requirements: Go 1.23+
+cd sushi-proxy
+
+# Build
+go build -o sushi-proxy ./cmd
+
+# Run
+export REDIS_ADDR=localhost:6379
+export ADMIN_USER=admin
+export ADMIN_PASSWORD=secret
+export CONFIG_FILE_PATH=config/config.yaml
+./sushi-proxy
+
+# Run tests
+go test ./...
+```
+
+## 🖥️ Sushi Manager UI
+
+Web-based UI for monitoring and management:
+
+| Page | Features |
+|------|----------|
+| `/upstreams` | Real-time metrics, health badges, EWMA latency |
+| `/health` | Auto-refresh health dashboard |
+| `/services` | Upstream count, aggregated health |
+| `/consumers` | Consumer management |
+
+```bash
+cd sushi-manager
+npm install && npm run dev
+```
+
+## 🗺️ Roadmap
+
+See the [Roadmap](ROADMAP.md) for future plans.
+
+## 🤝 Contributing
+
+We ❤️ contributions! Check out the [Contributing Guide](CONTRIBUTING.md).
+
+- **Discussions**: [GitHub Discussions](https://github.com/rawsashimi1604/sushi-gateway/discussions)
+- **Discord**: [Join our Discord](https://discord.gg/aPv4QhQ6)
+- **Issues**: [GitHub Issues](https://github.com/rawsashimi1604/sushi-gateway/issues)
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE)

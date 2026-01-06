@@ -53,6 +53,7 @@ export default defineConfig({
             text: "Minikube Helm (Kubernetes)",
             link: "/getting-started/minikube",
           },
+          { text: "UI Guide", link: "/getting-started/ui-guide" },
         ],
       },
       {
@@ -144,7 +145,10 @@ export default defineConfig({
         text: "Admin REST API",
         collapsed: true,
         link: "/api/",
-        items: [{ text: "Endpoints", link: "/api/endpoints" }],
+        items: [
+          { text: "Overview", link: "/api/endpoints" },
+          { text: "Admin API Reference", link: "/api/admin-api" },
+        ],
       },
     ],
 

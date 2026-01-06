@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,9 +17,8 @@ type KeyAuthPlugin struct {
 func NewKeyAuthPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_KEY_AUTH,
-		Priority: 1250,
-		Phase:    AccessPhase,
-		Handler: KeyAuthPlugin{
+		Priority: 200,
+		Handler: &KeyAuthPlugin{
 			config: config,
 		},
 		Validator: KeyAuthPlugin{
@@ -54,7 +54,9 @@ func (plugin KeyAuthPlugin) Execute(next http.Handler) http.Handler {
 		// Strip header
 		r.Header.Del("apiKey")
 
-		next.ServeHTTP(w, r)
+		// Set consumer ID in context (using API key as identity for now)
+		ctx := context.WithValue(r.Context(), constant.CONTEXT_CONSUMER_ID, apiKey)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 func (plugin KeyAuthPlugin) validateAPIKey(apiKey string) *model.HttpError {

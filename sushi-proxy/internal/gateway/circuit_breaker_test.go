@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -88,8 +89,8 @@ func TestCircuitBreakerPlugin_StateTransitions(t *testing.T) {
 	})
 
 	// Test 1: Circuit starts closed
-	cb := getOrCreateCircuitBreaker("test-service")
-	assert.Equal(t, CircuitClosed, cb.state)
+	cb := getOrCreateCircuitBreaker("test-service", 3, 2, 1*time.Second)
+	assert.Equal(t, gobreaker.StateClosed, cb.cb.State())
 
 	// Test 2: Record failures until circuit opens
 	for i := 0; i < 3; i++ {
@@ -97,7 +98,7 @@ func TestCircuitBreakerPlugin_StateTransitions(t *testing.T) {
 		rr := httptest.NewRecorder()
 		plugin.Execute(failureHandler).ServeHTTP(rr, req)
 	}
-	assert.Equal(t, CircuitOpen, cb.state)
+	assert.Equal(t, gobreaker.StateOpen, cb.cb.State())
 
 	// Test 3: Requests are rejected when circuit is open
 	req := httptest.NewRequest("GET", "/test-service/api", nil)
@@ -105,19 +106,31 @@ func TestCircuitBreakerPlugin_StateTransitions(t *testing.T) {
 	plugin.Execute(successHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 
-	// Test 4: Wait for timeout, circuit should transition to half-open
+	// Test 4: Wait for timeout, circuit should transition to half-open allowed request
+	// gobreaker doesn't auto-transition until a request is made
 	time.Sleep(1100 * time.Millisecond)
-	req = httptest.NewRequest("GET", "/test-service/api", nil)
-	rr = httptest.NewRecorder()
-	plugin.Execute(successHandler).ServeHTTP(rr, req)
-	assert.Equal(t, CircuitHalfOpen, cb.state)
 
-	// Test 5: Success in half-open increases success count
+	// The first request after timeout should be allowed (Half-Open trial)
 	req = httptest.NewRequest("GET", "/test-service/api", nil)
 	rr = httptest.NewRecorder()
 	plugin.Execute(successHandler).ServeHTTP(rr, req)
-	// After 2 successes (threshold), circuit should close
-	assert.Equal(t, CircuitClosed, cb.state)
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Since we defined success_threshold as 2 (MaxRequests: 2), we need another success to close it
+	// Actually, wait. gobreaker logic:
+	// If state is HalfOpen:
+	//   The allowed requests is limited by MaxRequests.
+	//   If a request succeeds, counts.TotalSuccesses++
+	//   If counts.ConsecutiveSuccesses >= MaxRequests -> StateClosed
+
+	// So we need 1 more success
+	req = httptest.NewRequest("GET", "/test-service/api", nil)
+	rr = httptest.NewRecorder()
+	plugin.Execute(successHandler).ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Now it should be closed
+	assert.Equal(t, gobreaker.StateClosed, cb.cb.State())
 }
 
 func TestIsFailureStatus(t *testing.T) {

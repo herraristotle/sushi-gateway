@@ -31,6 +31,8 @@ Sushi Gateway addresses these challenges with:
 
 - **Modular Policy Architecture**
   - Configure API plugins/policies at the global, service, or route scope for fine grained tuning.
+- **Advanced Load Balancing**
+  - Round-robin, Least-connections, Consistent-hashing, Latency-based EWMA 
 - **High Performance**
   - Built in **Golang**, optimized for concurrency and low latency.
 - **Declarative Configuration**
@@ -38,7 +40,7 @@ Sushi Gateway addresses these challenges with:
 - **Comprehensive Security**
   - Includes authentication (JWT, Basic Auth, API Keys), rate limiting, and CORS policies.
 - **Developer-Friendly**
-  - RESTful Admin API and intuitive UI for managing configurations.
+  - RESTful Admin API and intuitive UI for monitoring and management.
 
 ## Architecture Overview
 

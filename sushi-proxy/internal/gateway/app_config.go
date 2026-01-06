@@ -9,6 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/discovery/consul"
 )
 
 // LoadGlobalConfig loads configuration from environment and initializes the DI container.
@@ -75,6 +76,18 @@ func LoadGlobalConfig() (*container.AppConfig, error) {
 		errors = append(errors, "CONFIG_FILE_PATH is required.")
 	}
 
+	// Redis configuration (required for distributed rate limiting and caching)
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		errors = append(errors, "REDIS_ADDR is required for distributed rate limiting and caching.")
+	}
+	redisPassword := os.Getenv("REDIS_PASSWORD") // Optional, default empty
+	redisDB := 0                                 // Default to DB 0
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "sushi-gateway.db" // Default sqlite file
+	}
+
 	// JWT secret for Admin API authentication
 	// If not provided, auto-generate a secure random secret
 	var jwtSecret []byte
@@ -109,10 +122,33 @@ func LoadGlobalConfig() (*container.AppConfig, error) {
 		AdminCorsOrigin: adminCorsOrigin,
 		ConfigFilePath:  configFilePath,
 		JwtSecret:       jwtSecret,
+		RedisAddr:       redisAddr,
+		RedisPassword:   redisPassword,
+		RedisDB:         redisDB,
+		DbPath:          dbPath,
 	}
 
 	// Initialize the DI container
-	container.Initialize(config)
+	cont := container.NewContainer(config)
+
+	// Initialize Service Discovery Registry (Consul)
+	consulAddr := os.Getenv("CONSUL_ADDRESS")
+	if consulAddr != "" {
+		slog.Info("Initializing Consul Registry", "address", consulAddr)
+		registry, err := consul.NewConsulRegistry(consulAddr)
+		if err != nil {
+			slog.Error("Failed to initialize Consul registry", "error", err)
+			return nil, err
+		}
+		cont.Registry = registry
+	} else {
+		// Try localhost default if not specified but maybe needed?
+		// For now, only if CONSUL_ADDRESS is set.
+		// Or we can default to localhost:8500 if user wants default?
+		// Let's stick to explicit env var for now.
+	}
+
+	container.Global = cont
 	slog.Info("Initialized DI container")
 
 	return config, nil

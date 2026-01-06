@@ -18,9 +18,8 @@ type HeaderTransformationPlugin struct {
 func NewHeaderTransformationPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_HEADER_TRANSFORMATION,
-		Priority: 900, // Execute after auth plugins, before proxy
-		Phase:    AccessPhase,
-		Handler: HeaderTransformationPlugin{
+		Priority: 300,
+		Handler: &HeaderTransformationPlugin{
 			config: config,
 		},
 		Validator: HeaderTransformationPlugin{

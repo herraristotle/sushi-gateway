@@ -19,7 +19,7 @@ func (h hasher) Sum64(data []byte) uint64 {
 }
 
 type hashMember struct {
-	upstream model.Upstream
+	upstream model.UpstreamTarget
 }
 
 func (hm hashMember) String() string {
@@ -50,7 +50,7 @@ func NewConsistentHashRing(service model.Service) *ConsistentHashRing {
 }
 
 // Get the upstream id for a given client IP address hash
-func (chr *ConsistentHashRing) GetUpstream(hostIp string) model.Upstream {
+func (chr *ConsistentHashRing) GetUpstream(hostIp string) model.UpstreamTarget {
 	// Converts to byte first...
 	key := []byte(hostIp)
 	upstreamId := chr.ring.LocateKey(key)
@@ -62,10 +62,10 @@ func (chr *ConsistentHashRing) GetUpstream(hostIp string) model.Upstream {
 	}
 
 	// Won't happen, since the upstream id is guaranteed to be in the ring
-	return model.Upstream{}
+	return model.UpstreamTarget{}
 }
 
-func (chr *ConsistentHashRing) AddNewUpstream(upstream model.Upstream) {
+func (chr *ConsistentHashRing) AddNewUpstream(upstream model.UpstreamTarget) {
 	chr.ring.Add(hashMember{upstream: upstream})
 }
 

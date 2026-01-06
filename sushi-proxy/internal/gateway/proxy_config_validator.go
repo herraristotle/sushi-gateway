@@ -70,9 +70,18 @@ func ValidateConfig(config *model.ProxyConfig) error {
 // This allows users to omit the 'id' field in configuration files.
 func generateEntityIDs(config *model.ProxyConfig) {
 	// Generate IDs for global plugins
-	for i := range config.Global.Plugins {
-		if config.Global.Plugins[i].Id == "" {
-			config.Global.Plugins[i].Id = generateID()
+	for i := range config.Plugins {
+		if config.Plugins[i].Id == "" {
+			config.Plugins[i].Id = generateID()
+		}
+	}
+
+	// Generate IDs for top-level upstreams
+	for i := range config.Upstreams {
+		for j := range config.Upstreams[i].Targets {
+			if config.Upstreams[i].Targets[j].Id == "" {
+				config.Upstreams[i].Targets[j].Id = generateID()
+			}
 		}
 	}
 
@@ -113,7 +122,7 @@ func generateID() string {
 }
 
 func validateGeneralConfigs(config *model.ProxyConfig) error {
-	if config.Global.Name == "" {
+	if config.Name == "" {
 		return fmt.Errorf("global name is required")
 	}
 	return nil
@@ -124,7 +133,7 @@ func validatePlugins(config *model.ProxyConfig) error {
 	var plugins []model.PluginConfig
 	pluginValidator := NewPluginValidator()
 
-	for _, globalPlugin := range config.Global.Plugins {
+	for _, globalPlugin := range config.Plugins {
 		plugins = append(plugins, globalPlugin)
 	}
 

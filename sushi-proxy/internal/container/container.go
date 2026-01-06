@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"sync"
 
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/discovery"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
 
@@ -17,6 +18,11 @@ type AppConfig struct {
 	AdminCorsOrigin string
 	ConfigFilePath  string
 	JwtSecret       []byte
+	// Redis configuration (required for distributed rate limiting and caching)
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
+	DbPath        string
 }
 
 // CaCertPool wraps the certificate pool for mTLS
@@ -46,6 +52,9 @@ type Container struct {
 	// Circuit breakers map (per service)
 	CircuitBreakers     map[string]*CircuitBreakerState
 	CircuitBreakersLock *sync.RWMutex
+
+	// Service Discovery Registry
+	Registry discovery.Registry
 }
 
 // HealthCheckerInterface allows for mocking in tests

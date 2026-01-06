@@ -60,9 +60,25 @@ func (pv *PluginValidator) createPluginFromConfig(plugin model.PluginConfig) *Pl
 		return NewHttpLogPlugin(plugin.Config)
 	case constant.PLUGIN_CORS:
 		return NewCorsPlugin(plugin.Config)
+	case constant.PLUGIN_HEADER_TRANSFORMATION:
+		return NewHeaderTransformationPlugin(plugin.Config)
+	case constant.PLUGIN_CIRCUIT_BREAKER:
+		return NewCircuitBreakerPlugin(plugin.Config)
+	case constant.PLUGIN_RBAC:
+		return NewRBACPlugin(plugin.Config)
+	case constant.PLUGIN_SANITIZATION:
+		return NewSanitizationPlugin(plugin.Config)
+	case constant.PLUGIN_CACHE:
+		return NewCachePlugin(plugin.Config)
+	case constant.PLUGIN_SHADOW_TRAFFIC:
+		return NewShadowTrafficPlugin(plugin.Config)
+	case constant.PLUGIN_MULTI_AUTH:
+		return NewMultiAuthPlugin(plugin.Config)
+	case constant.PLUGIN_PROMETHEUS, constant.PLUGIN_OPENTELEMETRY:
+		// Observability plugins are validated differently or have simple configs
+		return &Plugin{Name: plugin.Name}
 	default:
-		// Default to basic auth plugin for now
-		return NewBasicAuthPlugin(plugin.Config)
+		return &Plugin{Name: plugin.Name}
 	}
 }
 

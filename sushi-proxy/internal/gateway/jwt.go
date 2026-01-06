@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -27,7 +28,6 @@ func NewJwtPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_JWT,
 		Priority: 1450,
-		Phase:    AccessPhase,
 		Handler: JwtPlugin{
 			config: config,
 		},
@@ -98,7 +98,10 @@ func (plugin JwtPlugin) Execute(next http.Handler) http.Handler {
 		// Strip Authorization header
 		r.Header.Del("Authorization")
 
-		next.ServeHTTP(w, r)
+		// Extract subject (sub) from token and set in context
+		sub, _ := getSubFromToken(tokenString)
+		ctx := context.WithValue(r.Context(), constant.CONTEXT_CONSUMER_ID, sub)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 
 }
@@ -223,4 +226,17 @@ func (plugin JwtPlugin) isClaimValid(token *jwt.Token, issuer string) bool {
 
 	slog.Error("Invalid JWT claims")
 	return false
+}
+
+func getSubFromToken(tokenString string) (string, error) {
+	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return nil, nil // We don't verify here, just parse claims, validation happened before
+	})
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		if sub, ok := claims["sub"].(string); ok {
+			return sub, nil
+		}
+	}
+	return "anonymous", nil
 }

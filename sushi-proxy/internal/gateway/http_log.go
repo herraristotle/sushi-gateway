@@ -29,9 +29,8 @@ type HttpLogConfig struct {
 func NewHttpLogPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_HTTP_LOG,
-		Priority: 12,
-		Phase:    LogPhase,
-		Handler: HttpLogPlugin{
+		Priority: 1000,
+		Handler: &HttpLogPlugin{
 			config: config,
 		},
 		Validator: HttpLogPlugin{
@@ -99,7 +98,8 @@ func (plugin HttpLogPlugin) parseConfig() *HttpLogConfig {
 func (plugin HttpLogPlugin) createLogBody(r *http.Request) (map[string]interface{}, *model.HttpError) {
 
 	// Get the service and route from the request
-	service, route, err := util.GetServiceAndRouteFromRequest(&GlobalProxyConfig, r)
+	globalConfig := GetGlobalProxyConfig()
+	service, route, err := util.GetServiceAndRouteFromRequest(globalConfig, r)
 	if err != nil {
 		return nil, model.NewHttpError(500, "ERR_PARSING_SERVICE_ROUTE",
 			"Error parsing service and route from request")
@@ -120,8 +120,7 @@ func (plugin HttpLogPlugin) createLogBody(r *http.Request) (map[string]interface
 		"service": map[string]interface{}{
 			"name":     service.Name,
 			"protocol": service.Protocol,
-			"host":     service.Upstreams[upstreamIndexToRoute].Host,
-			"port":     service.Upstreams[upstreamIndexToRoute].Port,
+			"target":   service.Upstreams[upstreamIndexToRoute].Target,
 		},
 		"route": map[string]interface{}{
 			"path": route.Path,

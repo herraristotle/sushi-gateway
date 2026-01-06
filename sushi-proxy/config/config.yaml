@@ -1,60 +1,184 @@
-# Sushi Gateway Configuration (YAML Format)
-# This is equivalent to config.json but in YAML format
+# =============================================================================
+# GLOBAL CONFIG
+# =============================================================================
+name: sushi-gateway
 
-global:
-  name: sushi-gateway-1
-  plugins:
-    - name: http_log
-      enabled: true
-      config:
-        http_endpoint: http://sushi-http-log-consumer:3000/v1/log
-        method: POST
-        content_type: application/json
-
-    - name: rate_limit
-      enabled: true
-      config:
-        limit_second: 10
-        limit_min: 10
-        limit_hour: 10
-
+# =============================================================================
+# SERVICES - Backend services that Sushi Gateway proxies to
+# =============================================================================
 services:
   - name: sushi-svc
     base_path: /sushi-service
     protocol: http
-    load_balancing_strategy: round_robin
-    upstreams:
-      - host: sushi-svc-1
-        port: 3000
-      - host: sushi-svc-2
-        port: 3000
-      - host: sushi-svc-3
-        port: 3000
-    plugins: []
+    host: controlplane-upstream # Reference to upstream defined below
+
     health:
       enabled: true
       path: /health
     routes:
       - name: get-sushi
         path: /v1/sushi
-        methods:
-          - GET
-        plugins:
-          - name: rate_limit
-            enabled: true
-            config:
-              limit_second: 10
-              limit_min: 10
-              limit_hour: 100
 
       - name: get-sushi-by-id
         path: /v1/sushi/{id}
-        methods:
-          - GET
-        plugins: []
 
       - name: get-sushi-restaurants
         path: /v1/sushi/restaurant
-        methods:
-          - GET
-        plugins: []
+
+  - name: secure-payment-service
+    base_path: /payments
+    protocol: https
+    host: dataplane-upstream
+
+    retries: 3
+    connect_timeout: 5000
+    read_timeout: 30000
+    write_timeout: 30000
+    tls:
+      enabled: true
+      ca_cert_path: /etc/certs/ca.crt
+      cert_path: /etc/certs/client.crt
+      key_path: /etc/certs/client.key
+    health:
+      enabled: true
+      path: /health
+    routes:
+      - name: process-payment
+        path: /v1/process
+        methods: [POST]
+        headers:
+          "X-Canary": "true"
+
+  - name: dashboard
+    base_path: /dashboard
+    protocol: http
+    routes:
+      - name: user-dashboard
+        path: /v1/user/{id}
+        backends:
+          - name: user
+            target: user-service:3000
+            path: /users/{id}
+            protocol: http
+            timeout_ms: 5000
+            required: true
+          - name: orders
+            target: order-service:3000
+            path: /orders?user_id={id}
+            protocol: http
+            timeout_ms: 3000
+            required: false
+          - name: notifications
+            target: notification-service:3000
+            path: /notifications/{id}
+            protocol: http
+            timeout_ms: 2000
+            required: false
+
+# =============================================================================
+# PLUGINS - Centralized plugin configurations
+# =============================================================================
+plugins:
+  # OpenTelemetry (disabled - enable when OTEL endpoint is configured)
+  # - name: opentelemetry
+  #   config:
+  #     endpoint: "http://monitoring-server:4317"
+  #     resource_attributes:
+  #       service.name: kong-gateway
+  #       service.version: "1.0.0"
+  #       deployment.environment: production
+  #     headers:
+  #       X-Auth-Token: ""
+  #     batch_span_count: 200
+  #     batch_flush_delay: 3
+
+  # Prometheus Metrics
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true
+      per_consumer: true
+
+  - name: http-log
+    config:
+      http_endpoint: http://sushi-http-log-consumer:3000/v1/log
+      method: POST
+      content_type: application/json
+
+  - name: rate-limiting
+    config:
+      minute: 100
+      hour: 5000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+
+  - name: sanitization
+    route: process-payment
+    config: {}
+
+  - name: cache
+    route: user-dashboard
+    config:
+      ttl: 60.0
+      cache_control: true
+
+# =============================================================================
+# UPSTREAMS - Load balancer groups
+# =============================================================================
+upstreams:
+  - name: controlplane-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        healthy:
+          interval: 5
+          successes: 2
+        unhealthy:
+          interval: 5
+          http_failures: 3
+        http_path: /health
+        timeout: 1
+        concurrency: 10
+        type: http
+    targets:
+      - target: localhost:8081
+        weight: 100
+
+  - name: dataplane-upstream
+    algorithm: least-connections
+    healthchecks:
+      active:
+        healthy:
+          interval: 5
+          successes: 2
+        unhealthy:
+          interval: 5
+          http_failures: 3
+        http_path: /health
+        timeout: 1
+        concurrency: 10
+        type: http
+    targets:
+      - target: localhost:8082
+        weight: 100
+
+  - name: queue-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        healthy:
+          interval: 5
+          successes: 2
+        unhealthy:
+          interval: 5
+          http_failures: 3
+        http_path: /health
+        timeout: 1
+        concurrency: 10
+        type: http
+    targets:
+      - target: localhost:9090
+        weight: 100

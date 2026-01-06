@@ -1,0 +1,178 @@
+# Sushi Gateway E2E Test Configuration
+# Uses existing test-services for realistic testing
+
+version: "3.8"
+
+networks:
+  sushi-e2e:
+    driver: bridge
+
+services:
+  # Redis - Required for distributed rate limiting and caching
+  redis:
+    image: redis:7-alpine
+    container_name: sushi-redis
+    networks:
+      - sushi-e2e
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend Sushi Service 1 - Primary upstream
+  sushi-svc-1:
+    build:
+      context: ./test-services/sushi-api
+      dockerfile: Dockerfile
+    container_name: sushi-svc-e2e-1
+    networks:
+      - sushi-e2e
+    environment:
+      APP_ID: "svc-1"
+      JWT_ISSUER: "sushi-gateway"
+      JWT_SECRET: "test-secret-123"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend Sushi Service 2 - For load balancing tests
+  sushi-svc-2:
+    build:
+      context: ./test-services/sushi-api
+      dockerfile: Dockerfile
+    container_name: sushi-svc-e2e-2
+    networks:
+      - sushi-e2e
+    environment:
+      APP_ID: "svc-2"
+      JWT_ISSUER: "sushi-gateway"
+      JWT_SECRET: "test-secret-123"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend Sushi Service 3 - For BFF aggregation (user data)
+  user-service:
+    build:
+      context: ./test-services/sushi-api
+      dockerfile: Dockerfile
+    container_name: user-service-e2e
+    networks:
+      - sushi-e2e
+    environment:
+      APP_ID: "user-svc"
+      JWT_ISSUER: "sushi-gateway"
+      JWT_SECRET: "test-secret-123"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend Sushi Service 4 - For BFF aggregation (order data)
+  order-service:
+    build:
+      context: ./test-services/sushi-api
+      dockerfile: Dockerfile
+    container_name: order-service-e2e
+    networks:
+      - sushi-e2e
+    environment:
+      APP_ID: "order-svc"
+      JWT_ISSUER: "sushi-gateway"
+      JWT_SECRET: "test-secret-123"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend Sushi Service 5 - For BFF aggregation (notifications)
+  notification-service:
+    build:
+      context: ./test-services/sushi-api
+      dockerfile: Dockerfile
+    container_name: notification-service-e2e
+    networks:
+      - sushi-e2e
+    environment:
+      APP_ID: "notification-svc"
+      JWT_ISSUER: "sushi-gateway"
+      JWT_SECRET: "test-secret-123"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  # Log Server - For http_log plugin testing
+  sushi-log-server:
+    build:
+      context: ./test-services/sushi-log-server
+      dockerfile: Dockerfile
+    container_name: sushi-log-server-e2e
+    networks:
+      - sushi-e2e
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Sushi Gateway Proxy
+  sushi-proxy:
+    build:
+      context: ./sushi-proxy
+      dockerfile: Dockerfile
+    container_name: sushi-proxy-e2e
+    networks:
+      - sushi-e2e
+    ports:
+      - "8080:8080" # HTTP
+      - "8443:8443" # HTTPS  
+      - "8081:8081" # Admin API + Metrics
+    environment:
+      CONFIG_FILE_PATH: /app/config/config.e2e.yaml
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin123
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+    volumes:
+      - ./sushi-proxy/config:/app/config
+    depends_on:
+      redis:
+        condition: service_healthy
+      sushi-svc-1:
+        condition: service_healthy
+      sushi-svc-2:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/healthz" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # E2E Test Runner
+  e2e-tests:
+    image: curlimages/curl:latest
+    container_name: sushi-e2e-tests
+    networks:
+      - sushi-e2e
+    depends_on:
+      sushi-proxy:
+        condition: service_healthy
+    volumes:
+      - ./e2e-tests:/tests
+    entrypoint: [ "/bin/sh", "/tests/run-tests.sh" ]

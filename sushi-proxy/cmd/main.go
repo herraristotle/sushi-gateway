@@ -13,16 +13,50 @@ import (
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/gateway"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/telemetry"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 )
 
 func main() {
+	// Initialize structured logging (JSON) for production
+	logLevel := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "DEBUG" {
+		logLevel = slog.LevelDebug
+	}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	slog.SetDefault(logger)
+
+	var shutdownTracer func(context.Context) error
+	var err error
 
 	// Load gateway environment config (this also initializes container.Global)
-	_, err := gateway.LoadGlobalConfig()
+	_, err = gateway.LoadGlobalConfig()
 	if err != nil {
 		os.Exit(1)
 	}
+
+	// Initialize SQL Store for dynamic configuration
+	if err := gateway.InitSQLStore(container.Global.AppConfig.DbPath); err != nil {
+		slog.Error("Failed to initialize SQL store", "error", err)
+		os.Exit(1)
+	}
+
+	// Initialize Redis client (required for distributed rate limiting and caching)
+	err = gateway.InitRedisClient(gateway.RedisConfig{
+		Addr:     container.Global.AppConfig.RedisAddr,
+		Password: container.Global.AppConfig.RedisPassword,
+		DB:       container.Global.AppConfig.RedisDB,
+	})
+	if err != nil {
+		slog.Error("Failed to initialize Redis", "error", err)
+		os.Exit(1)
+	}
+	defer gateway.CloseRedisClient()
 
 	// Setup error group with cancellation context
 	errGrpCtx, cancel := context.WithCancel(context.Background())
@@ -32,10 +66,16 @@ func main() {
 	// Initialize all servers and routers first
 	appRouter := gateway.NewRouter()
 
+	// Wrap router with OpenTelemetry Middleware if enabled
+	var finalHandler http.Handler = appRouter
+	if gateway.EnableOTEL {
+		finalHandler = otelhttp.NewHandler(appRouter, "sushi-gateway-handler")
+	}
+
 	// Initialize HTTP server
 	httpServer := &http.Server{
 		Addr:    ":" + constant.PORT_HTTP,
-		Handler: appRouter,
+		Handler: finalHandler,
 	}
 
 	// Initialize HTTPS server
@@ -56,7 +96,7 @@ func main() {
 
 	httpsServer := &http.Server{
 		Addr:      ":" + constant.PORT_HTTPS,
-		Handler:   appRouter,
+		Handler:   finalHandler,
 		TLSConfig: tlsConfig,
 	}
 
@@ -76,6 +116,19 @@ func main() {
 	if err := gateway.LoadProxyConfigFromConfigFile(container.Global.AppConfig.ConfigFilePath); err != nil {
 		slog.Error("Failed to load initial config file", "error", err)
 		os.Exit(1)
+	}
+
+	// Initialize OpenTelemetry if enabled
+	if gateway.EnableOTEL {
+		shutdownTracer, err = telemetry.InitTracer("sushi-gateway")
+		if err != nil {
+			slog.Error("Failed to initialize OpenTelemetry", "error", err)
+		}
+		defer func() {
+			if shutdownTracer != nil {
+				shutdownTracer(context.Background())
+			}
+		}()
 	}
 
 	// Start the file watcher

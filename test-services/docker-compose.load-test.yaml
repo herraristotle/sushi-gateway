@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Gateway
+  sushi-proxy:
+    build:
+      context: ../sushi-proxy
+      dockerfile: Dockerfile
+
+    environment:
+      - CONFIG_FILE_PATH=/app/config.yaml
+      - ADMIN_CORS_ORIGIN=*
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=password
+      - REDIS_ADDR=redis:6379
+    volumes:
+      - ./load-test-config.yaml:/app/config.yaml
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    depends_on:
+      - sushi-api-1
+      - sushi-api-2
+      - sushi-api-3
+      - redis
+
+  sushi-api-stress:
+    build: ../test-services/sushi-api
+    deploy:
+      replicas: 10
+    environment:
+      - APP_ID=stress-cluster
+      - JWT_SECRET=secret
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  vegeta:
+    image: peterevans/vegeta
+    container_name: vegeta
+    command: vegeta attack -targets=/vegeta/targets.txt -duration=1h -rate=2000 -output=/vegeta/results.bin
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - ./vegeta:/vegeta
+
+  # Redis
+  redis:
+    image: redis:alpine
+
+  # Test Services (Upstreams)
+  sushi-api-1:
+    build: ../test-services/sushi-api
+    environment:
+      - APP_ID=upstream-1
+      - JWT_SECRET=secret
+    ports:
+      - "3001:3000"
+
+  sushi-api-2:
+    build: ../test-services/sushi-api
+    environment:
+      - APP_ID=upstream-2
+      - JWT_SECRET=secret
+    ports:
+      - "3002:3000"
+
+  sushi-api-3:
+    build: ../test-services/sushi-api
+    environment:
+      - APP_ID=upstream-3
+      - JWT_SECRET=secret
+    ports:
+      - "3003:3000"
+
+  # Load Generator
+  k6:
+    image: grafana/k6:latest
+    volumes:
+      - ./k6:/scripts
+    command: run /scripts/load_test_suite.js
+    depends_on:
+      - sushi-proxy

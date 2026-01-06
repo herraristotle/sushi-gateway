@@ -1,91 +1,198 @@
-# Contributor Guide
+# Contributing to Sushi Gateway
 
-Thank you for your interest in contributing to Sushi Gateway! 🎉 
+Thank you for your interest in contributing to Sushi Gateway! This guide will help you get started with development.
 
-We value all contributions, no matter how big or small. Whether it’s bug reports, fixes, documentation improvements, or new examples—your efforts are appreciated! Before diving in, please take a moment to read through this guide to ensure smooth collaboration.
+## 🛠️ Development Environment Setup
 
-## Table of Contents
+### Prerequisites
 
-- [Reporting an Issue](#reporting-an-issue)
-- [Before You Contribute](#before-you-contribute)
-  - [Code Reviews](#code-reviews)
-  - [Coding Guidelines](#coding-guidelines)
-  - [Continuous Integration](#continuous-integration)
-  - [Tests and Documentation](#tests-and-documentation)
-- [The Fine Print](#the-fine-print)
+- **Go 1.23+** - [Install Go](https://go.dev/doc/install)
+- **Docker & Docker Compose** - For running Redis and E2E tests
+- **Make** (optional) - For simplified commands
+- **Node.js 18+** (optional) - For sushi-manager UI development
 
----
-
-## Reporting an Issue
-
-We use GitHub Issues to track bugs, feature requests, and other tasks. When reporting an issue:
-
-1. Clearly describe the problem.
-2. Provide steps to reproduce it.
-3. Share what you observed and what you expected to happen.
-4. Attach logs or screenshots, if applicable.
-
-Help us help you by making your report as detailed as possible!
-
----
-
-## Before You Contribute
-
-Contributions are made via GitHub Pull Requests (PRs) from your **own fork** of the repository. Ensure your Git author details are correctly configured:
+### Clone the Repository
 
 ```bash
-git config --global user.name "Your Full Name"
-git config --global user.email your.email@example.com
+git clone https://github.com/rawsashimi1604/sushi-gateway.git
+cd sushi-gateway
 ```
 
-This ensures you receive proper credit for your contributions. If you use multiple machines, make sure your Git configuration is consistent across them.
+### Project Structure
 
----
+```
+sushi-gateway/
+├── sushi-proxy/          # Core Gateway (Go)
+│   ├── cmd/              # Main entrypoint
+│   ├── config/           # Configuration files
+│   ├── internal/
+│   │   ├── api/          # Admin API endpoints
+│   │   ├── gateway/      # Plugins, proxy logic
+│   │   ├── container/    # Dependency injection
+│   │   ├── discovery/    # Service discovery
+│   │   └── model/        # Data models
+│   └── go.mod
+├── sushi-manager/        # Web UI (React/TypeScript)
+├── docs/                 # VitePress documentation
+└── e2e-tests/            # End-to-end tests
+```
 
-### Code Reviews
+## 🚀 Running the Gateway
 
-All submissions, including those by project maintainers, require at least one approval from a Sushi Gateway committer before merging. 
+### 1. Start Redis
 
-We follow the [GitHub Pull Request Review Process](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews). Please address all feedback promptly and ensure your PR is clear and concise.
+```bash
+docker run -d --name sushi-redis -p 6379:6379 redis:alpine
+```
 
----
+### 2. Configure Environment
 
-### Coding Guidelines
+```bash
+cd sushi-proxy
+cp .env.example .env
 
-Adhere to the following coding best practices:
+# Edit .env with your settings:
+# ADMIN_USER=admin
+# ADMIN_PASSWORD=secret
+# REDIS_ADDR=localhost:6379
+# CONFIG_FILE_PATH=config/config.yaml
+```
 
-- Write clean, modular, and readable code.
-- Follow established patterns and conventions used in the repository.
-- Include comments where necessary, especially for complex logic.
+### 3. Build and Run
 
----
+```bash
+# Build
+go build -o sushi-proxy ./cmd
 
-### Continuous Integration
+# Run
+./sushi-proxy
+```
 
-To ensure stability, all changes must pass our CI workflows before merging. 
+The gateway will be available at:
+- HTTP Proxy: `http://localhost:8080`
+- HTTPS Proxy: `https://localhost:8443`
+- Admin API: `http://localhost:8081`
 
-Sushi Gateway uses GitHub Actions for CI. When you submit a PR, automated tests and checks will run. Monitor the status of these workflows and resolve any failures promptly.
+## 🧪 Running Tests
 
----
+### Unit Tests
 
-### Tests and Documentation
+```bash
+cd sushi-proxy
+go test ./... -v
+```
 
-Tests and documentation are **not optional**:
+### E2E Tests
 
-- **Tests**: Include unit tests or integration tests relevant to your changes.
-- **Documentation**: Update the Vitepress documentation located in the `/docs` directory to reflect your changes.
+```bash
+# From project root
+docker compose -f docker-compose.e2e.yml up --build
 
-Remember, well-documented code and robust tests make everyone's life easier.
+# View results
+docker compose -f docker-compose.e2e.yml logs e2e-tests
+```
 
----
+## 📝 Creating a New Plugin
 
+Plugins are the core extension mechanism. Here's how to create one:
 
-## The Fine Print
+### 1. Create the Plugin File
 
-Sushi Gateway is an open-source project, and we expect all contributors to adhere to these principles:
+```bash
+touch sushi-proxy/internal/gateway/my_plugin.go
+```
 
-1. **Be Respectful**: Engage with others politely and constructively.
-2. **Act Responsibly**: Submit well-tested and high-quality changes.
-3. **Enjoy**: Open source is a collaborative and rewarding experience—have fun!
+### 2. Implement the Plugin
 
-We look forward to your contributions and thank you for making Sushi Gateway even better! 🎉
+```go
+package gateway
+
+import (
+    "net/http"
+    "github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
+)
+
+type MyPlugin struct {
+    config map[string]interface{}
+}
+
+func NewMyPlugin(config map[string]interface{}) *Plugin {
+    return &Plugin{
+        Name:     constant.PLUGIN_MY_PLUGIN,
+        Priority: 500,  // Higher = runs earlier
+        Handler:  &MyPlugin{config: config},
+        Validator: &MyPlugin{config: config},
+    }
+}
+
+func (p *MyPlugin) Validate() error {
+    // Validate configuration
+    return nil
+}
+
+func (p *MyPlugin) Execute(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Your plugin logic here
+        
+        // Continue to next plugin
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+### 3. Register the Plugin
+
+Add to `internal/constant/constant.go`:
+```go
+const PLUGIN_MY_PLUGIN = "my_plugin"
+```
+
+Add to `AVAILABLE_PLUGINS` list and `plugin_manager.go`.
+
+### 4. Write Tests
+
+```bash
+touch sushi-proxy/internal/gateway/my_plugin_test.go
+```
+
+## 🔀 Pull Request Process
+
+1. **Fork** the repository
+2. **Create a branch**: `git checkout -b feature/my-feature`
+3. **Make changes** and add tests
+4. **Run tests**: `go test ./...`
+5. **Commit**: `git commit -m "feat: add my feature"`
+6. **Push**: `git push origin feature/my-feature`
+7. **Open PR** against `main` branch
+
+### Commit Message Convention
+
+We use [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation
+- `refactor:` - Code refactoring
+- `test:` - Adding tests
+- `chore:` - Maintenance
+
+## 📊 Performance Benchmarking
+
+Run benchmarks to measure gateway performance:
+
+```bash
+cd sushi-proxy
+./scripts/benchmark.sh
+```
+
+See [Performance Report](./BENCHMARK.md) for results.
+
+## 🤝 Getting Help
+
+- **Discord**: [Join our Discord](https://discord.gg/aPv4QhQ6)
+- **Discussions**: [GitHub Discussions](https://github.com/rawsashimi1604/sushi-gateway/discussions)
+- **Issues**: [GitHub Issues](https://github.com/rawsashimi1604/sushi-gateway/issues)
+
+## 📄 License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.

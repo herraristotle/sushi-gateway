@@ -3,12 +3,12 @@ package gateway
 import (
 	"log/slog"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter() *mux.Router {
+func NewRouter() *chi.Mux {
 	slog.Info("Creating new router...")
-	router := mux.NewRouter()
+	router := chi.NewRouter()
 
 	egressController := NewSushiProxy()
 	egressController.RegisterRoutes(router)

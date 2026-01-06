@@ -3,14 +3,14 @@ package api
 import (
 	"context"
 	"encoding/base64"
-	"errors"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/gorilla/mux"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
@@ -32,9 +32,9 @@ func NewAuthController() *AuthController {
 	return &AuthController{}
 }
 
-func (c *AuthController) RegisterRoutes(router *mux.Router) {
-	router.Path("/login").Methods("POST").HandlerFunc(c.Login())
-	router.Path("/logout").Methods("DELETE").HandlerFunc(c.Logout())
+func (c *AuthController) RegisterRoutes(router chi.Router) {
+	router.Post("/login", c.Login())
+	router.Delete("/logout", c.Logout())
 }
 
 func (c *AuthController) Login() http.HandlerFunc {
@@ -94,7 +94,11 @@ func (c *AuthController) Login() http.HandlerFunc {
 		})
 
 		slog.Info("Login success:: " + username)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"token": tokenString,
+		})
 	}
 }
 
@@ -157,19 +161,29 @@ func validateJWT(tokenString string) (*Claims, *model.HttpError) {
 
 func ProtectRouteUsingJWT(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		cookie, err := req.Cookie("token")
-		if err != nil {
-			if errors.Is(err, http.ErrNoCookie) {
-				model.NewHttpError(http.StatusUnauthorized, "UNAUTHORIZED_AUTH",
-					"Cookie not found").WriteJSONResponse(w)
-				return
+		var tokenString string
+
+		// 1. Try to get token from Authorization header (Bearer)
+		authHeader := req.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+
+		// 2. Fallback to cookie if not in header
+		if tokenString == "" {
+			cookie, err := req.Cookie("token")
+			if err == nil {
+				tokenString = cookie.Value
 			}
-			model.NewHttpError(http.StatusBadRequest, "BAD_REQUEST",
-				"Error getting cookie").WriteJSONResponse(w)
+		}
+
+		if tokenString == "" {
+			model.NewHttpError(http.StatusUnauthorized, "UNAUTHORIZED_AUTH",
+				"Authentication token missing").WriteJSONResponse(w)
 			return
 		}
 
-		claims, httpErr := validateJWT(cookie.Value)
+		claims, httpErr := validateJWT(tokenString)
 		if httpErr != nil {
 			httpErr.WriteJSONResponse(w)
 			return

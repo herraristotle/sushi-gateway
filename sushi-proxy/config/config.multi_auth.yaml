@@ -1,0 +1,28 @@
+services:
+  - name: multi-auth-demo
+    url: http://backend:8080
+    routes:
+      - name: secure-api
+        paths: [/api/v1/secure]
+        plugins:
+          # Multi-Auth: Try JWT first, then API Key, then Basic Auth
+          - name: multi_auth
+            enabled: true
+            config:
+              # Order matters! First success wins.
+              strategies: ["jwt", "key_auth", "basic_auth"]
+              
+              # JWT config (for Bearer token auth)
+              jwt:
+                alg: "HS256"
+                iss: "my-issuer"
+                secret: "my-jwt-secret"
+              
+              # API Key config (for header-based auth)
+              key_auth:
+                key: "super-secret-api-key"
+              
+              # Basic Auth config (fallback for legacy clients)
+              basic_auth:
+                username: "admin"
+                password: "admin123"

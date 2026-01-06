@@ -17,9 +17,8 @@ type AclPlugin struct {
 func NewAclPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_ACL,
-		Priority: 950,
-		Phase:    AccessPhase,
-		Handler: AclPlugin{
+		Priority: 100,
+		Handler: &AclPlugin{
 			config: config,
 		},
 		Validator: AclPlugin{

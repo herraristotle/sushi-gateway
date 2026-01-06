@@ -2,7 +2,7 @@ package constant
 
 // PORTS
 const PORT_ADMIN_API = "8081"
-const PORT_HTTP = "8008"
+const PORT_HTTP = "8080"
 const PORT_HTTPS = "8443"
 
 // PROTOCOLS
@@ -29,18 +29,32 @@ var AVAILABLE_PLUGINS = []string{
 	PLUGIN_CORS,
 	PLUGIN_HEADER_TRANSFORMATION,
 	PLUGIN_CIRCUIT_BREAKER,
+	PLUGIN_RBAC,
+	PLUGIN_SANITIZATION,
+	PLUGIN_CACHE,
+	PLUGIN_SHADOW_TRAFFIC,
+	PLUGIN_MULTI_AUTH,
+	PLUGIN_PROMETHEUS,
+	PLUGIN_OPENTELEMETRY,
 }
 
-const PLUGIN_RESPONSE_HANDLER = "response_handler"
-const PLUGIN_BASIC_AUTH = "basic_auth"
+const PLUGIN_RESPONSE_HANDLER = "response-handler"
+const PLUGIN_BASIC_AUTH = "basic-auth"
 const PLUGIN_ACL = "acl"
 const PLUGIN_CORS = "cors"
-const PLUGIN_BOT_PROTECTION = "bot_protection"
-const PLUGIN_RATE_LIMIT = "rate_limit"
-const PLUGIN_REQUEST_SIZE_LIMIT = "request_size_limit"
+const PLUGIN_BOT_PROTECTION = "bot-protection"
+const PLUGIN_RATE_LIMIT = "rate-limiting"
+const PLUGIN_REQUEST_SIZE_LIMIT = "request-size-limiting"
 const PLUGIN_JWT = "jwt"
-const PLUGIN_KEY_AUTH = "key_auth"
+const PLUGIN_KEY_AUTH = "key-auth"
 const PLUGIN_MTLS = "mtls"
-const PLUGIN_HTTP_LOG = "http_log"
-const PLUGIN_HEADER_TRANSFORMATION = "header_transformation"
-const PLUGIN_CIRCUIT_BREAKER = "circuit_breaker"
+const PLUGIN_HTTP_LOG = "http-log"
+const PLUGIN_HEADER_TRANSFORMATION = "header-transformation"
+const PLUGIN_CIRCUIT_BREAKER = "circuit-breaker"
+const PLUGIN_RBAC = "rbac"
+const PLUGIN_SANITIZATION = "sanitization"
+const PLUGIN_CACHE = "cache"
+const PLUGIN_SHADOW_TRAFFIC = "shadow-traffic"
+const PLUGIN_MULTI_AUTH = "multi-auth"
+const PLUGIN_PROMETHEUS = "prometheus"
+const PLUGIN_OPENTELEMETRY = "opentelemetry"

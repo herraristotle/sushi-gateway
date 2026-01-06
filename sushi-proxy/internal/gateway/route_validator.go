@@ -27,20 +27,35 @@ func (rv *RouteValidator) ValidateRoute(route model.Route) error {
 }
 
 func validatePath(route model.Route) error {
-	if !strings.HasPrefix(route.Path, "/") {
-		return fmt.Errorf("route path: %s must start with /", route.Path)
+	if route.Path == "" && len(route.Paths) == 0 {
+		return fmt.Errorf("route %s: must specify at least one path", route.Name)
 	}
 
-	if strings.HasSuffix(route.Path, "/") {
-		return fmt.Errorf("route path: %s must not end with /", route.Path)
+	if route.Path != "" {
+		if !strings.HasPrefix(route.Path, "/") {
+			return fmt.Errorf("route path: %s must start with /", route.Path)
+		}
+		if strings.HasSuffix(route.Path, "/") && len(route.Path) > 1 {
+			return fmt.Errorf("route path: %s must not end with /", route.Path)
+		}
 	}
+
+	for _, p := range route.Paths {
+		if !strings.HasPrefix(p, "/") {
+			return fmt.Errorf("route path: %s must start with /", p)
+		}
+		if strings.HasSuffix(p, "/") && len(p) > 1 {
+			return fmt.Errorf("route path: %s must not end with /", p)
+		}
+	}
+
 	return nil
 }
 
 func validateMethod(route model.Route) error {
-
+	// Empty methods means ALL methods are allowed (standard proxy behavior)
 	if len(route.Methods) == 0 {
-		return fmt.Errorf("route methods must be specified")
+		return nil
 	}
 
 	for _, method := range route.Methods {

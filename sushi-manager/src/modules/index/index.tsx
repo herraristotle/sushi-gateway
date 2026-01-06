@@ -4,6 +4,7 @@ import { useGatewayData } from "../../hooks/useGatewayState";
 import EnvConfiguration from "./EnvConfiguration";
 import GatewayConfiguration from "./GatewayConfiguration";
 import Summary from "./Summary";
+import RateLimitCard from "../../components/stats/RateLimitCard";
 
 function IndexModule() {
   // Get some information from Sushi proxy API, probably from global state.
@@ -22,6 +23,10 @@ function IndexModule() {
           <EnvConfiguration config={gatewayInfo?.config} />
           <GatewayConfiguration config={gatewayInfo?.gateway} />
         </div>
+
+        {/* Rate Limiting Stats Card */}
+        <RateLimitCard />
+
         {/* <DashboardCard className="p-6">graph to be added...</DashboardCard> */}
       </div>
     </Container>

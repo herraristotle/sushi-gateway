@@ -47,7 +47,8 @@ func validateBasePath(service *model.Service) error {
 	if !strings.HasPrefix(service.BasePath, "/") {
 		return fmt.Errorf("service path: %s must start with /", service.BasePath)
 	}
-	if strings.HasSuffix(service.BasePath, "/") {
+	// Allow root path "/" but prevent other trailing slashes like "/api/"
+	if service.BasePath != "/" && strings.HasSuffix(service.BasePath, "/") {
 		return fmt.Errorf("service path: %s must not end with /", service.BasePath)
 	}
 	return nil
@@ -62,8 +63,26 @@ func validateProtocol(service *model.Service) error {
 }
 
 func validateUpstream(service *model.Service) error {
+	// If URL is set, upstreams are not required (Direct URL mode)
+	if service.URL != "" {
+		return nil
+	}
+
+	// If any route is an aggregation route, upstreams are not required at service level
+	hasAggregationRoute := false
+	for _, route := range service.Routes {
+		if len(route.Backends) > 0 {
+			hasAggregationRoute = true
+			break
+		}
+	}
+
+	if hasAggregationRoute {
+		return nil
+	}
+
 	if len(service.Upstreams) == 0 {
-		return fmt.Errorf("service :%s must have at least one upstream", service.Name)
+		return fmt.Errorf("service :%s must have at least one upstream or a direct URL", service.Name)
 	}
 	return nil
 }

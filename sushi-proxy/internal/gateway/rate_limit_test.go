@@ -17,114 +17,114 @@ func TestRateLimitValidation(t *testing.T) {
 		{
 			name: "valid config",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(10),
-				"limit_hour":   float64(10),
+				"second": float64(10),
+				"minute": float64(10),
+				"hour":   float64(10),
 			},
 			expectError: false,
 		},
 		{
 			name: "missing limit_second",
 			config: map[string]interface{}{
-				"limit_min":  float64(10),
-				"limit_hour": float64(10),
+				"minute": float64(10),
+				"hour":   float64(10),
 			},
-			expectError: true,
+			expectError: false,
 		},
 		{
 			name: "missing limit_min",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_hour":   float64(10),
+				"second": float64(10),
+				"hour":   float64(10),
 			},
-			expectError: true,
+			expectError: false,
 		},
 		{
 			name: "missing limit_hour",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(10),
+				"second": float64(10),
+				"minute": float64(10),
 			},
-			expectError: true,
+			expectError: false,
 		},
 		{
 			name: "invalid limit_second type",
 			config: map[string]interface{}{
-				"limit_second": "10",
-				"limit_min":    float64(10),
-				"limit_hour":   float64(10),
+				"second": "10",
+				"minute": float64(10),
+				"hour":   float64(10),
 			},
 			expectError: true,
 		},
 		{
 			name: "invalid limit_min type",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    "10",
-				"limit_hour":   float64(10),
+				"second": float64(10),
+				"minute": "10",
+				"hour":   float64(10),
 			},
 			expectError: true,
 		},
 		{
 			name: "invalid limit_hour type",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(10),
-				"limit_hour":   "10",
+				"second": float64(10),
+				"minute": float64(10),
+				"hour":   "10",
 			},
 			expectError: true,
 		},
 		{
 			name: "zero limit_second",
 			config: map[string]interface{}{
-				"limit_second": float64(0),
-				"limit_min":    float64(10),
-				"limit_hour":   float64(10),
+				"second": float64(0),
+				"minute": float64(10),
+				"hour":   float64(10),
 			},
 			expectError: true,
 		},
 		{
 			name: "zero limit_min",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(0),
-				"limit_hour":   float64(10),
+				"second": float64(10),
+				"minute": float64(0),
+				"hour":   float64(10),
 			},
 			expectError: true,
 		},
 		{
 			name: "zero limit_hour",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(10),
-				"limit_hour":   float64(0),
+				"second": float64(10),
+				"minute": float64(10),
+				"hour":   float64(0),
 			},
 			expectError: true,
 		},
 		{
 			name: "negative limit_second",
 			config: map[string]interface{}{
-				"limit_second": float64(-10),
-				"limit_min":    float64(10),
-				"limit_hour":   float64(10),
+				"second": float64(-10),
+				"minute": float64(10),
+				"hour":   float64(10),
 			},
 			expectError: true,
 		},
 		{
 			name: "negative limit_min",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(-10),
-				"limit_hour":   float64(10),
+				"second": float64(10),
+				"minute": float64(-10),
+				"hour":   float64(10),
 			},
 			expectError: true,
 		},
 		{
 			name: "negative limit_hour",
 			config: map[string]interface{}{
-				"limit_second": float64(10),
-				"limit_min":    float64(10),
-				"limit_hour":   float64(-10),
+				"second": float64(10),
+				"minute": float64(10),
+				"hour":   float64(-10),
 			},
 			expectError: true,
 		},
@@ -152,13 +152,12 @@ func TestRateLimitValidation(t *testing.T) {
 
 func createMockProxyConfig(t *testing.T) *model.ProxyConfig {
 	rateLimitPlugin := model.PluginConfig{
-		Id:      "someId",
-		Name:    "rate_limit",
-		Enabled: true,
+		Id:   "someId",
+		Name: "rate-limiting",
 		Config: map[string]interface{}{
-			"limit_second": 10,
-			"limit_min":    10,
-			"limit_hour":   10,
+			"second": 10,
+			"minute": 10,
+			"hour":   10,
 		},
 	}
 
@@ -167,7 +166,7 @@ func createMockProxyConfig(t *testing.T) *model.ProxyConfig {
 		BasePath:              "/mockService",
 		Protocol:              "http",
 		LoadBalancingStrategy: model.RoundRobin,
-		Upstreams:             make([]model.Upstream, 0),
+		Upstreams:             make([]model.UpstreamTarget, 0),
 		Plugins: []model.PluginConfig{
 			rateLimitPlugin,
 		},
@@ -182,7 +181,7 @@ func createMockProxyConfig(t *testing.T) *model.ProxyConfig {
 	}
 
 	proxyConfig := &model.ProxyConfig{}
-	proxyConfig.Global.Name = "mockProxy"
+	proxyConfig.Name = "mockProxy"
 	proxyConfig.Services = []model.Service{service}
 
 	return proxyConfig

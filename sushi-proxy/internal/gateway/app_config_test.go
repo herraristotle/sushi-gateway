@@ -20,6 +20,8 @@ func setupTestEnv(t *testing.T) func() {
 		"ADMIN_CORS_ORIGIN",
 		"CONFIG_FILE_PATH",
 		"JWT_SECRET",
+		"REDIS_ADDR",
+		"REDIS_PASSWORD",
 	}
 
 	for _, env := range envVars {
@@ -47,6 +49,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 	os.Setenv("ADMIN_USER", "admin")
 	os.Setenv("ADMIN_PASSWORD", "password")
 	os.Setenv("CONFIG_FILE_PATH", "config.json")
+	os.Setenv("REDIS_ADDR", "localhost:6379")
 
 	config, err := LoadGlobalConfig()
 
@@ -70,6 +73,7 @@ func TestLoadGlobalConfig_WithCustomCerts(t *testing.T) {
 	os.Setenv("ADMIN_USER", "admin")
 	os.Setenv("ADMIN_PASSWORD", "password")
 	os.Setenv("CONFIG_FILE_PATH", "config.json")
+	os.Setenv("REDIS_ADDR", "localhost:6379")
 	os.Setenv("SERVER_CERT_PATH", "/custom/cert.pem")
 	os.Setenv("SERVER_KEY_PATH", "/custom/key.pem")
 	os.Setenv("CA_CERT_PATH", "/custom/ca.pem")
@@ -91,6 +95,7 @@ func TestLoadGlobalConfig_FailingCustomCerts(t *testing.T) {
 	os.Setenv("ADMIN_USER", "admin")
 	os.Setenv("ADMIN_PASSWORD", "password")
 	os.Setenv("CONFIG_FILE_PATH", "config.json")
+	os.Setenv("REDIS_ADDR", "localhost:6379")
 	os.Setenv("SERVER_CERT_PATH", "/custom/cert.pem")
 	// Deliberately omit SERVER_KEY_PATH to trigger error
 
@@ -102,6 +107,7 @@ func TestLoadGlobalConfig_FailingCustomCerts(t *testing.T) {
 	os.Setenv("ADMIN_USER", "admin")
 	os.Setenv("ADMIN_PASSWORD", "password")
 	os.Setenv("CONFIG_FILE_PATH", "config.json")
+	os.Setenv("REDIS_ADDR", "localhost:6379")
 	os.Setenv("SERVER_KEY_PATH", "/custom/key.pem")
 	// Deliberately omit SERVER_CERT_PATH to trigger error
 

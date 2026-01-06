@@ -11,10 +11,10 @@ func TestConsistentHashRing_GetUpstream(t *testing.T) {
 	// Create a test service with multiple upstreams
 	service := model.Service{
 		Name: "test-service",
-		Upstreams: []model.Upstream{
-			{Id: "upstream1", Host: "localhost", Port: 8081},
-			{Id: "upstream2", Host: "localhost", Port: 8082},
-			{Id: "upstream3", Host: "localhost", Port: 8083},
+		Upstreams: []model.UpstreamTarget{
+			{Id: "upstream1", Target: "localhost:8081"},
+			{Id: "upstream2", Target: "localhost:8082"},
+			{Id: "upstream3", Target: "localhost:8083"},
 		},
 	}
 
@@ -68,9 +68,9 @@ func TestConsistentHashRing_AddNewUpstream(t *testing.T) {
 	// Create initial service with upstreams
 	service := model.Service{
 		Name: "test-service",
-		Upstreams: []model.Upstream{
-			{Id: "upstream1", Host: "localhost", Port: 8081},
-			{Id: "upstream2", Host: "localhost", Port: 8082},
+		Upstreams: []model.UpstreamTarget{
+			{Id: "upstream1", Target: "localhost:8081"},
+			{Id: "upstream2", Target: "localhost:8082"},
 		},
 	}
 
@@ -92,10 +92,9 @@ func TestConsistentHashRing_AddNewUpstream(t *testing.T) {
 	}
 
 	// Add new upstream
-	newUpstream := model.Upstream{
-		Id:   "upstream3",
-		Host: "localhost",
-		Port: 8083,
+	newUpstream := model.UpstreamTarget{
+		Id:     "upstream3",
+		Target: "localhost:8083",
 	}
 	chr.AddNewUpstream(newUpstream)
 
@@ -118,10 +117,10 @@ func TestConsistentHashRing_RemoveUpstream(t *testing.T) {
 	// Create initial service with upstreams
 	service := model.Service{
 		Name: "test-service",
-		Upstreams: []model.Upstream{
-			{Id: "upstream1", Host: "localhost", Port: 8081},
-			{Id: "upstream2", Host: "localhost", Port: 8082},
-			{Id: "upstream3", Host: "localhost", Port: 8083},
+		Upstreams: []model.UpstreamTarget{
+			{Id: "upstream1", Target: "localhost:8081"},
+			{Id: "upstream2", Target: "localhost:8082"},
+			{Id: "upstream3", Target: "localhost:8083"},
 		},
 	}
 

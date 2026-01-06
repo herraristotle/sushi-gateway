@@ -1,65 +1,27 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync"
-
-	"golang.org/x/time/rate"
+	"strings"
+	"time"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/util"
 )
 
-// IPRateLimiter holds the rate limiter for an IP address
-type IPRateLimiter struct {
-	mu         sync.RWMutex
-	limiterSec *rate.Limiter
-	limiterMin *rate.Limiter
-	limiterHr  *rate.Limiter
-}
-
-// RateLimitStore stores rate limiters for different scopes, that points to ip
-type RateLimitStore struct {
-	limits map[string]map[string]*IPRateLimiter // scope -> ip -> limiter
-}
-
-// Global rate limit stores
-var globalRateLimitStore = &RateLimitStore{
-	limits: make(map[string]map[string]*IPRateLimiter),
-}
-
 type RateLimitPlugin struct {
 	config      map[string]interface{}
 	proxyConfig *model.ProxyConfig
 }
 
-// getLimiter retrieves or creates a rate limiter for an IP address
-func (s *RateLimitStore) getLimiter(scope, ip string, secLimit, minLimit, hrLimit float64) *IPRateLimiter {
-	if s.limits[scope] == nil {
-		s.limits[scope] = make(map[string]*IPRateLimiter)
-	}
-
-	if limiter, exists := s.limits[scope][ip]; exists {
-		return limiter
-	}
-
-	limiter := &IPRateLimiter{
-		limiterSec: rate.NewLimiter(rate.Limit(secLimit), 1),                // per second
-		limiterMin: rate.NewLimiter(rate.Limit(minLimit/60), int(minLimit)), // per minute
-		limiterHr:  rate.NewLimiter(rate.Limit(hrLimit/3600), int(hrLimit)), // per hour
-	}
-	s.limits[scope][ip] = limiter
-	return limiter
-}
-
 func NewRateLimitPlugin(config map[string]interface{}, proxyConfig *model.ProxyConfig) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_RATE_LIMIT,
-		Priority: 910,
-		Phase:    AccessPhase,
+		Priority: 50, // Run before cache to prevent rate limit bypass
 		Handler: RateLimitPlugin{
 			config:      config,
 			proxyConfig: proxyConfig,
@@ -70,31 +32,46 @@ func NewRateLimitPlugin(config map[string]interface{}, proxyConfig *model.ProxyC
 	}
 }
 
+// getNumberConfig safely extracts a number from config map handling float64, int, int64
+func getNumberConfig(config map[string]interface{}, key string) (int64, error) {
+	val, ok := config[key]
+	if !ok {
+		return 0, fmt.Errorf("missing key: %s", key)
+	}
+
+	switch v := val.(type) {
+	case float64:
+		return int64(v), nil
+	case int:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	default:
+		return 0, fmt.Errorf("invalid type for key %s: expected number, got %T", key, val)
+	}
+}
+
 func (plugin RateLimitPlugin) Validate() error {
-	limitSec, ok := plugin.config["limit_second"].(float64)
-	if !ok {
-		return fmt.Errorf("limit_second must be a number")
-	}
-	if limitSec <= 0 {
-		return fmt.Errorf("limit_second must be greater than 0")
+	// Validate rate limits - at least one must be provided and > 0
+	foundLimit := false
+	limits := []string{"second", "minute", "hour"}
+
+	for _, limitKey := range limits {
+		if _, ok := plugin.config[limitKey]; ok {
+			num, err := getNumberConfig(plugin.config, limitKey)
+			if err != nil {
+				return err
+			}
+			if num <= 0 {
+				return fmt.Errorf("%s must be > 0", limitKey)
+			}
+			foundLimit = true
+		}
 	}
 
-	limitMin, ok := plugin.config["limit_min"].(float64)
-	if !ok {
-		return fmt.Errorf("limit_min must be a number")
+	if !foundLimit {
+		return fmt.Errorf("at least one of [second, minute, hour] must be provided and > 0")
 	}
-	if limitMin <= 0 {
-		return fmt.Errorf("limit_min must be greater than 0")
-	}
-
-	limitHour, ok := plugin.config["limit_hour"].(float64)
-	if !ok {
-		return fmt.Errorf("limit_hour must be a number")
-	}
-	if limitHour <= 0 {
-		return fmt.Errorf("limit_hour must be greater than 0")
-	}
-
 	return nil
 }
 
@@ -125,13 +102,41 @@ func (plugin RateLimitPlugin) getMapKeyEntry(configLevel string, service *model.
 	} else {
 		return fmt.Sprintf("Route::%s", route.Name)
 	}
-
 }
 
-// Execute implementation
+// checkRateLimitRedis checks and increments rate limit counter in Redis
+// Returns true if request is allowed, false if rate limit exceeded
+func (plugin RateLimitPlugin) checkRateLimitRedis(ctx context.Context, key string, limit int64, windowSeconds int) (bool, int64, error) {
+	// Use Redis INCR + EXPIRE for atomic token bucket
+	// The key includes the time window to create sliding windows
+	windowKey := fmt.Sprintf("%s:%d", key, time.Now().Unix()/int64(windowSeconds))
+
+	count, err := GlobalRedisClient.Incr(ctx, windowKey).Result()
+	if err != nil {
+		return false, 0, fmt.Errorf("redis INCR failed: %w", err)
+	}
+
+	// Set expiration only on first request (when count == 1)
+	if count == 1 {
+		GlobalRedisClient.Expire(ctx, windowKey, time.Duration(windowSeconds)*time.Second)
+	}
+
+	remaining := limit - count
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	return count <= limit, remaining, nil
+}
+
+// Execute implementation using Redis for distributed rate limiting
+// Uses Kong-style window-based rate limiting (fixed window default, sliding window available)
+// Reference: https://developer.konghq.com/plugins/rate-limiting-advanced/
 func (plugin RateLimitPlugin) Execute(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("Executing rate limit function...")
+		slog.Debug("Executing rate limit function...")
+
+		ctx := r.Context()
 
 		service, route, err := util.GetServiceAndRouteFromRequest(plugin.proxyConfig, r)
 		if err != nil {
@@ -149,53 +154,82 @@ func (plugin RateLimitPlugin) Execute(next http.Handler) http.Handler {
 		}
 
 		// Get rate limits from config
-		limitSec := plugin.config["limit_second"].(float64)
-		limitMin := plugin.config["limit_min"].(float64)
-		limitHour := plugin.config["limit_hour"].(float64)
+		limitSec, _ := getNumberConfig(plugin.config, "second")
+		limitMin, _ := getNumberConfig(plugin.config, "minute")
+		limitHour, _ := getNumberConfig(plugin.config, "hour")
+
+		// Advanced Config (Kong-compatible)
+		faultTolerant := true
+		if val, ok := plugin.config["fault_tolerant"].(bool); ok {
+			faultTolerant = val
+		}
+
+		hideClientHeaders := false
+		if val, ok := plugin.config["hide_client_headers"].(bool); ok {
+			hideClientHeaders = val
+		}
 
 		// Get scope key
 		scope := plugin.getMapKeyEntry(rateLimitOperationLevel, service, route)
+		baseKey := RateLimitKey(fmt.Sprintf("%s:%s", scope, clientIp), "")
 
-		// Get or create limiter for this IP
-		limiter := globalRateLimitStore.getLimiter(scope, clientIp, limitSec, limitMin, limitHour)
+		// Helper to check limits using sliding window approach
+		checkLimit := func(suffix string, limit int64, window int, headerSuffix string) bool {
+			if limit == 0 {
+				return true // Skip if limit is 0
+			}
 
-		// Guard against race conditions
-		limiter.mu.Lock()
-		defer limiter.mu.Unlock()
+			key := baseKey + suffix
+			allowed, remaining, redisIsErr := plugin.checkRateLimitRedis(ctx, key, limit, window)
 
-		slog.Info("Rate limiting for IP: " + clientIp)
-		slog.Info("Remaining seconds: " + fmt.Sprintf("%f", limiter.limiterSec.Tokens()))
-		slog.Info("Remaining minutes: " + fmt.Sprintf("%f", limiter.limiterMin.Tokens()))
-		slog.Info("Remaining hours: " + fmt.Sprintf("%f", limiter.limiterHr.Tokens()))
+			if redisIsErr != nil {
+				slog.Error("Redis rate limit check failed", "error", redisIsErr)
+				if !faultTolerant {
+					model.NewHttpError(http.StatusInternalServerError, "RATE_LIMIT_STORE_ERROR", "An unexpected error occurred").WriteJSONResponse(w)
+					return false
+				}
+				slog.Warn("Rate limiting bypassed due to Redis error (fault_tolerant=true)")
+				return true
+			}
 
-		// Check all limits
-		if !limiter.limiterSec.Allow() {
-			err := model.NewHttpError(http.StatusTooManyRequests,
-				"RATE_LIMIT_SECOND_EXCEEDED",
-				fmt.Sprintf("Rate limit exceeded for %s (per second)", scope))
-			err.WriteLogMessage()
-			err.WriteJSONResponse(w)
+			if !hideClientHeaders {
+				w.Header().Set(fmt.Sprintf("X-RateLimit-Limit-%s", headerSuffix), fmt.Sprintf("%d", limit))
+				w.Header().Set(fmt.Sprintf("X-RateLimit-Remaining-%s", headerSuffix), fmt.Sprintf("%d", remaining))
+			}
+
+			if !allowed {
+				RecordRateLimitHit(scope, headerSuffix)
+				if !hideClientHeaders {
+					w.Header().Set(fmt.Sprintf("X-RateLimit-Reset-%s", headerSuffix), fmt.Sprintf("%d", window))
+					w.Header().Set("Retry-After", fmt.Sprintf("%d", window))
+				}
+				httpErr := model.NewHttpError(http.StatusTooManyRequests,
+					fmt.Sprintf("RATE_LIMIT_%s_EXCEEDED", strings.ToUpper(headerSuffix)),
+					fmt.Sprintf("Rate limit exceeded for %s (per %s)", scope, headerSuffix))
+				httpErr.WriteLogMessage()
+				httpErr.WriteJSONResponse(w)
+				return false
+			}
+			return true
+		}
+
+		// Check per-second limit
+		if limitSec > 0 && !checkLimit("sec", limitSec, 1, "Second") {
 			return
 		}
 
-		if !limiter.limiterMin.Allow() {
-			err := model.NewHttpError(http.StatusTooManyRequests,
-				"RATE_LIMIT_MINUTE_EXCEEDED",
-				fmt.Sprintf("Rate limit exceeded for %s (per minute)", scope))
-			err.WriteLogMessage()
-			err.WriteJSONResponse(w)
+		// Check per-minute limit
+		if limitMin > 0 && !checkLimit("min", limitMin, 60, "Minute") {
 			return
 		}
 
-		if !limiter.limiterHr.Allow() {
-			err := model.NewHttpError(http.StatusTooManyRequests,
-				"RATE_LIMIT_HOUR_EXCEEDED",
-				fmt.Sprintf("Rate limit exceeded for %s (per hour)", scope))
-			err.WriteLogMessage()
-			err.WriteJSONResponse(w)
+		// Check per-hour limit
+		if limitHour > 0 && !checkLimit("hr", limitHour, 3600, "Hour") {
 			return
 		}
 
+		slog.Debug("Rate limiting passed", "ip", clientIp, "scope", scope)
+		RecordRateLimitAllowed(scope)
 		next.ServeHTTP(w, r)
 	})
 }

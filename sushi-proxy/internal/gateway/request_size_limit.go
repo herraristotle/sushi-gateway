@@ -16,9 +16,8 @@ type RequestSizeLimitPlugin struct {
 func NewRequestSizeLimitPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_REQUEST_SIZE_LIMIT,
-		Priority: 951,
-		Phase:    AccessPhase,
-		Handler: RequestSizeLimitPlugin{
+		Priority: 50,
+		Handler: &RequestSizeLimitPlugin{
 			config: config,
 		},
 		Validator: RequestSizeLimitPlugin{

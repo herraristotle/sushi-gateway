@@ -1,6 +1,9 @@
-FROM golang:1.22 as build-stage
+FROM golang:1.24-alpine as build-stage
 
 WORKDIR /app
+
+# Install build dependencies for CGO (sqlite3)
+RUN apk add --no-cache build-base
 
 COPY go.mod ./
 COPY go.sum ./
@@ -8,7 +11,8 @@ RUN go mod download
 
 COPY ./ ./
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /proxy /app/cmd
+RUN go mod tidy
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags musl -o /proxy /app/cmd
 
 # Run the tests in the container
 FROM build-stage AS run-test-stage

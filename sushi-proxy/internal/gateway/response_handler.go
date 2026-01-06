@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/util"
 )
 
 // This plugin is not configurable
@@ -18,9 +19,8 @@ type ResponseHandlerPlugin struct {
 func NewResponseHandlerPlugin(config map[string]interface{}) *Plugin {
 	return &Plugin{
 		Name:     constant.PLUGIN_RESPONSE_HANDLER,
-		Priority: 10000,
-		Phase:    ResponsePhase,
-		Handler: ResponseHandlerPlugin{
+		Priority: 0,
+		Handler: &ResponseHandlerPlugin{
 			config: config,
 		},
 		Validator: ResponseHandlerPlugin{
@@ -38,8 +38,9 @@ func (plugin ResponseHandlerPlugin) Execute(next http.Handler) http.Handler {
 		slog.Info("Executing response handler function...")
 		next.ServeHTTP(w, r)
 
-		// Get the capture writer injected from config
-		captureWriter, _ := plugin.config["capture_writer"].(*captureResponseWriter)
+		// The writer passed in should already be our capture writer from SushiProxy,
+		// but we also have it in context if needed.
+		captureWriter, _ := w.(*captureResponseWriter)
 
 		// After response is sent, add metadata to the request context
 		// Add response metadata to request context after handling completes
@@ -49,5 +50,34 @@ func (plugin ResponseHandlerPlugin) Execute(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, constant.CONTEXT_RESPONSE_STATUS, captureWriter.statusCode)
 		ctx = context.WithValue(ctx, constant.CONTEXT_END_TIME, time.Now())
 		*r = *r.WithContext(ctx)
+
+		// Record Prometheus Metrics
+		service, route, err := util.GetServiceAndRouteFromRequest(GetGlobalProxyConfig(), r)
+		serviceName := "unknown"
+		routeName := "unknown"
+		if err == nil {
+			serviceName = service.Name
+			routeName = route.Name
+		}
+
+		startTime, ok := ctx.Value(constant.CONTEXT_START_TIME).(time.Time)
+		// Fallback if not found (unlikely but safe)
+		if !ok {
+			startTime = time.Now()
+		}
+		duration := time.Since(startTime).Seconds()
+
+		statusCode := 0
+		if captureWriter != nil {
+			statusCode = captureWriter.statusCode
+		}
+
+		slog.Info("Recording request metrics",
+			"service", serviceName,
+			"route", routeName,
+			"method", r.Method,
+			"status", statusCode,
+			"duration", duration)
+		RecordRequest(serviceName, routeName, r.Method, statusCode, duration)
 	})
 }

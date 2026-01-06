@@ -1,0 +1,4 @@
+p, admin, /*, (GET)|(POST)|(PUT)|(DELETE)
+p, user, /api/*, GET
+g, alice, admin
+g, bob, user

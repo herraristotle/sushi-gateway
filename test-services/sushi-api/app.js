@@ -6,6 +6,11 @@ require("dotenv").config();
 const app = express();
 const port = 3000;
 
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Mock data
 const sushiData = [
   {
@@ -60,10 +65,18 @@ app.get("/v1/sushi/restaurant/:id", (req, res) => {
   }
 });
 
+// GET /delay
+app.get("/delay", (req, res) => {
+  const ms = parseInt(req.query.ms) || 0;
+  setTimeout(() => {
+    res.json({ app_id: process.env.APP_ID, delay: ms, message: "Delayed response" });
+  }, ms);
+});
+
 app.get("/v1/token", (req, res) => {
   const signingMethod = req.query.alg
   const availableSigningMethods = ["HS256", "RS256"]
-  
+
   if (!availableSigningMethods.includes(signingMethod)) {
     return res.status(400).json({ error: "Invalid signing method. Use 'HS256' or 'RS256'" });
   }
@@ -95,10 +108,10 @@ app.get("/v1/token", (req, res) => {
         algorithm: 'HS256',
         expiresIn: "1h"
       });
-    } 
+    }
     res.json({ token });
   } catch (err) {
-    console.error('Error generating token:', err);  
+    console.error('Error generating token:', err);
     res.status(500).json({ error: "Failed to generate token" });
   }
 });
