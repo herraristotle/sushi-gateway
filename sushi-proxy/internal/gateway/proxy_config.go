@@ -12,7 +12,7 @@ import (
 )
 
 // Reads from declarative config file
-var globalProxyConfig atomic.Value
+var globalProxyConfig atomic.Pointer[model.ProxyConfig]
 var GlobalConfigStore ConfigStore
 
 func GetGlobalProxyConfig() *model.ProxyConfig {
@@ -20,7 +20,7 @@ func GetGlobalProxyConfig() *model.ProxyConfig {
 	if cfg == nil {
 		return &model.ProxyConfig{}
 	}
-	return cfg.(*model.ProxyConfig)
+	return cfg
 }
 
 func LoadProxyConfigFromConfigFile(filePath string) error {
@@ -50,6 +50,9 @@ func LoadProxyConfigFromConfigFile(filePath string) error {
 		return err
 	}
 
+	// Pre-compute runtime values
+	initializeRuntime(config)
+
 	err = ValidateConfig(config)
 	if err != nil {
 		slog.Error("Error validating gateway file", "error", err)
@@ -74,6 +77,11 @@ func LoadProxyConfigFromConfigFile(filePath string) error {
 
 	// Reset load balancer caches
 	ResetLoadBalancers()
+
+	// Update Router dynamically
+	if GlobalSushiProxy != nil {
+		GlobalSushiProxy.UpdateRouter(config)
+	}
 
 	return nil
 }
@@ -111,6 +119,8 @@ func ReloadConfigFromStore() error {
 		slog.Error("Failed to link upstreams during reload", "error", err)
 		return err
 	}
+	// Pre-compute runtime values
+	initializeRuntime(config)
 	slog.Debug("Validating config...")
 	if err := ValidateConfig(config); err != nil {
 		slog.Error("Failed to validate config during reload", "error", err)
@@ -119,6 +129,9 @@ func ReloadConfigFromStore() error {
 
 	globalProxyConfig.Store(config)
 	ResetLoadBalancers()
+	if GlobalSushiProxy != nil {
+		GlobalSushiProxy.UpdateRouter(config)
+	}
 	slog.Info("Gateway configuration reloaded from SQL store")
 	return nil
 }
@@ -147,16 +160,19 @@ func WatchConfigFile(ctx context.Context, filePath string) error {
 			}
 			if event.Op&fsnotify.Write != 0 {
 				if err := LoadProxyConfigFromConfigFile(filePath); err != nil {
-					slog.Error("Failed to load config file", "error", err)
-					return err
+					// Log error but continue watching - don't terminate the watcher
+					// Invalid config changes should not bring down the gateway
+					slog.Error("Config reload failed, keeping previous config", "error", err)
+					continue
 				}
+				slog.Info("Configuration reloaded successfully")
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
-			slog.Error("Filesystem watcher error", "error", err)
-			return err
+			// Filesystem errors are also non-fatal, just log and continue
+			slog.Error("Filesystem watcher error (non-fatal)", "error", err)
 		}
 	}
 }
@@ -279,4 +295,15 @@ func linkUpstreams(config *model.ProxyConfig) error {
 		}
 	}
 	return nil
+}
+
+// initializeRuntime pre-computes cache keys and other runtime optimizations
+func initializeRuntime(config *model.ProxyConfig) {
+	for i := range config.Services {
+		svc := &config.Services[i]
+		// Pre-compute Transport Cache Key to avoid Sprintf on hot path
+		svc.TransportCacheKey = fmt.Sprintf("%d-%d-%d-%v-%s-%s-%s",
+			svc.ConnectTimeout, svc.ReadTimeout, svc.WriteTimeout,
+			svc.TLS.Enabled, svc.TLS.CaCertPath, svc.TLS.CertPath, svc.TLS.KeyPath)
+	}
 }

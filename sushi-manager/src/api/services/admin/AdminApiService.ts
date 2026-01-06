@@ -29,9 +29,23 @@ function getGatewayConfig() {
   });
 }
 
+function upsertUpstream(upstream: any) {
+  return HttpRequest.post("/upstreams", upstream, {
+    withCredentials: true,
+  });
+}
+
+function upsertRoute(serviceName: string, route: any) {
+  return HttpRequest.post(`/services/${serviceName}/routes`, route, {
+    withCredentials: true,
+  });
+}
+
 export default {
   login,
   logout,
   getGatewayData,
   getGatewayConfig,
+  upsertUpstream,
+  upsertRoute,
 };

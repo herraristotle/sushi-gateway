@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/discovery"
-	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
 
 // AppConfig holds application-level configuration loaded from environment
@@ -36,12 +35,6 @@ type CaCertPool struct {
 type Container struct {
 	// Application configuration from environment
 	AppConfig *AppConfig
-
-	// Proxy configuration from config file
-	ProxyConfig *model.ProxyConfig
-
-	// Lock for thread-safe proxy config access
-	ConfigLock *sync.RWMutex
 
 	// CA Certificate pool for mTLS
 	CaCertPool *CaCertPool
@@ -79,26 +72,11 @@ var Global *Container
 // NewContainer creates a new dependency injection container
 func NewContainer(appConfig *AppConfig) *Container {
 	return &Container{
-		AppConfig:           appConfig,
-		ProxyConfig:         &model.ProxyConfig{},
-		ConfigLock:          &sync.RWMutex{},
+		AppConfig: appConfig,
+
 		CircuitBreakers:     make(map[string]*CircuitBreakerState),
 		CircuitBreakersLock: &sync.RWMutex{},
 	}
-}
-
-// GetProxyConfig returns the proxy config with read lock
-func (c *Container) GetProxyConfig() model.ProxyConfig {
-	c.ConfigLock.RLock()
-	defer c.ConfigLock.RUnlock()
-	return *c.ProxyConfig
-}
-
-// SetProxyConfig updates the proxy config with write lock
-func (c *Container) SetProxyConfig(config *model.ProxyConfig) {
-	c.ConfigLock.Lock()
-	defer c.ConfigLock.Unlock()
-	c.ProxyConfig = config
 }
 
 // Initialize sets up the global container instance

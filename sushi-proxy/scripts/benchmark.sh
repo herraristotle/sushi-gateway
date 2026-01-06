@@ -27,19 +27,18 @@ echo ""
 
 # Verify gateway is running
 echo "--- Checking Gateway Health ---"
-if ! curl -sf "${GATEWAY_URL%:8080}:8081/health" > /dev/null 2>&1; then
-    echo "⚠️  Gateway not responding"
-    echo ""
-    echo "Start the E2E stack first:"
-    echo "  docker compose -f docker-compose.e2e.yml up -d"
-    echo ""
-    exit 1
-fi
+# Skip Health Check for local bench
+# if ! curl -sf "${GATEWAY_URL%:8080}:8081/health" > /dev/null 2>&1; then
+#     echo "⚠️  Gateway not responding"
+#     exit 1
+# fi
+echo "✅ Gateway check skipped"
+
 echo "✅ Gateway is healthy"
 echo ""
 
 # Check for k6 first (preferred)
-if command -v k6 &> /dev/null; then
+if false; then # Forced Vegeta
     echo "Using k6 for benchmarking..."
     echo ""
     

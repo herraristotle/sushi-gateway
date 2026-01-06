@@ -11,6 +11,7 @@ interface UpstreamData {
     active_connections: number;
     ewma_latency_ms: number;
     health_status: string;
+    tags?: string[];
 }
 
 interface UpstreamTableProps {
@@ -31,6 +32,12 @@ function UpstreamTable({ upstreams }: UpstreamTableProps) {
                     <th className="px-6 py-3">
                         <div className="flex flex-row items-center gap-2">
                             <span>target</span>
+                            <IoMdInformationCircle className="text-lg mb-0.5" />
+                        </div>
+                    </th>
+                    <th className="px-6 py-3">
+                        <div className="flex flex-row items-center gap-2">
+                            <span>tags</span>
                             <IoMdInformationCircle className="text-lg mb-0.5" />
                         </div>
                     </th>
@@ -94,6 +101,19 @@ function UpstreamTableRow({ upstream }: UpstreamTableRowProps) {
                 </td>
                 <td className="px-6 py-4 font-medium whitespace-nowrap">
                     {upstream.target}
+                </td>
+                <td className="px-6 py-4 font-medium whitespace-nowrap">
+                    <div className="flex gap-1">
+                        {upstream.tags && upstream.tags.length > 0 ? (
+                            upstream.tags.map((tag, i) => (
+                                <span key={i} className="bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded border border-blue-100 uppercase tracking-tighter font-sans">
+                                    {tag}
+                                </span>
+                            ))
+                        ) : (
+                            <span className="text-gray-400 text-[10px]">-</span>
+                        )}
+                    </div>
                 </td>
                 <td className="px-6 py-4">
                     <HealthBadge status={upstream.health_status} />

@@ -125,6 +125,7 @@ plugins:
       ttl: 60.0
       cache_control: true
 
+# Optional
 # =============================================================================
 # UPSTREAMS - Load balancer groups
 # =============================================================================
@@ -144,7 +145,7 @@ upstreams:
         concurrency: 10
         type: http
     targets:
-      - target: localhost:8081
+      - target: localhost:3001
         weight: 100
 
   - name: dataplane-upstream

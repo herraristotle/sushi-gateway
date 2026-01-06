@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -126,12 +127,15 @@ func (plugin CircuitBreakerPlugin) Execute(next http.Handler) http.Handler {
 		// Get or create the CP with the current config
 		cb := getOrCreateCircuitBreaker(serviceName, failureThreshold, successThreshold, timeout)
 
+		var recorder *responseRecorder
+
 		// Execute the request via the circuit breaker
 		_, err := cb.cb.Execute(func() (interface{}, error) {
 			// Create a response recorder to capture the response status
-			recorder := &responseRecorder{
-				ResponseWriter: w,
-				statusCode:     http.StatusOK,
+			recorder = &responseRecorder{
+				headers:    make(http.Header),
+				body:       new(bytes.Buffer),
+				statusCode: http.StatusOK,
 			}
 
 			// Execute the next handler
@@ -146,36 +150,49 @@ func (plugin CircuitBreakerPlugin) Execute(next http.Handler) http.Handler {
 		})
 
 		// Handle circuit breaker errors (Open state or Too Many Requests)
-		if err != nil {
-			// If it's an error we returned from the function (upstream failure),
-			// the response is already written by next.ServeHTTP, so we don't do anything.
-			// However, gobreaker returns the error from our closure.
+		if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
+			slog.Warn("Circuit breaker rejected request", "service", serviceName, "error", err)
+			model.NewHttpError(http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE",
+				"Service temporarily unavailable (circuit breaker open)").WriteJSONResponse(w)
+			return
+		}
 
-			// If the error is gobreaker.ErrOpenState or gobreaker.ErrTooManyRequests,
-			// it means the block wasn't executed, so we need to return 503.
-			if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
-				slog.Warn("Circuit breaker rejected request", "service", serviceName, "error", err)
-				model.NewHttpError(http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE",
-					"Service temporarily unavailable (circuit breaker open)").WriteJSONResponse(w)
-				return
+		// For success or upstream failure (which we trapped to update CB stats),
+		// we write the buffered response to the client
+		if recorder != nil {
+			// Copy headers
+			for k, v := range recorder.headers {
+				for _, val := range v {
+					w.Header().Add(k, val)
+				}
 			}
-
-			// For other errors (which are just the upstream failures we propagated to trip the breaker),
-			// the response has already been written to the recorder -> w.
-			// So we technically don't need to do anything else here.
+			// Write status code
+			w.WriteHeader(recorder.statusCode)
+			// Write body
+			if recorder.body != nil {
+				w.Write(recorder.body.Bytes())
+			}
 		}
 	})
 }
 
-// responseRecorder wraps ResponseWriter to capture status code
+// responseRecorder buffers the response to avoid writing until CB logic is done
 type responseRecorder struct {
-	http.ResponseWriter
+	headers    http.Header
+	body       *bytes.Buffer
 	statusCode int
+}
+
+func (r *responseRecorder) Header() http.Header {
+	return r.headers
+}
+
+func (r *responseRecorder) Write(b []byte) (int, error) {
+	return r.body.Write(b)
 }
 
 func (r *responseRecorder) WriteHeader(code int) {
 	r.statusCode = code
-	r.ResponseWriter.WriteHeader(code)
 }
 
 // isFailureStatus checks if the HTTP status code indicates a failure

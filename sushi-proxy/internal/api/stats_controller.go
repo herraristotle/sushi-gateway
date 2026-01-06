@@ -34,13 +34,14 @@ type HealthStatus struct {
 
 // UpstreamStats represents metrics for an upstream
 type UpstreamStats struct {
-	UpstreamId   string  `json:"upstream_id"`
-	ServiceName  string  `json:"service_name"`
-	Target       string  `json:"target"`
-	Weight       int     `json:"weight"`
-	ActiveConns  int64   `json:"active_connections"`
-	EWMALatency  float64 `json:"ewma_latency_ms"`
-	HealthStatus string  `json:"health_status"`
+	UpstreamId   string   `json:"upstream_id"`
+	ServiceName  string   `json:"service_name"`
+	Target       string   `json:"target"`
+	Weight       int      `json:"weight"`
+	ActiveConns  int64    `json:"active_connections"`
+	EWMALatency  float64  `json:"ewma_latency_ms"`
+	HealthStatus string   `json:"health_status"`
+	Tags         []string `json:"tags,omitempty"`
 }
 
 // RateLimitStats represents rate limiting statistics
@@ -141,6 +142,7 @@ func (c *StatsController) GetStats(w http.ResponseWriter, r *http.Request) {
 				ActiveConns:  gateway.GetActiveConnections(service.Name, upstream.Id),
 				EWMALatency:  gateway.GetEWMA(service.Name, upstream.Id) * 1000, // Convert to ms
 				HealthStatus: "unknown",
+				Tags:         upstream.Tags,
 			}
 
 			// Get health status

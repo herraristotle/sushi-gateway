@@ -15,23 +15,25 @@ func TestKeyAuthValidation(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "valid config",
+			name: "valid config with key",
 			config: map[string]interface{}{
 				"key": mockValidKey,
 			},
 			expectError: false,
 		},
 		{
-			name:        "missing key",
+			// Now valid: key can come from consumers section
+			name:        "missing key - valid for consumer-based auth",
 			config:      map[string]interface{}{},
-			expectError: true,
+			expectError: false,
 		},
 		{
-			name: "empty key",
+			// Now valid: key can come from consumers section
+			name: "empty key - valid for consumer-based auth",
 			config: map[string]interface{}{
 				"key": "",
 			},
-			expectError: true,
+			expectError: false,
 		},
 	}
 

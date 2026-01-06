@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/api"
@@ -61,6 +63,16 @@ func main() {
 	// Setup error group with cancellation context
 	errGrpCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Handle OS signals for graceful shutdown
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigChan
+		slog.Warn("Received shutdown signal", "signal", sig.String())
+		cancel()
+	}()
+
 	errGroup, errGrpCtx := errgroup.WithContext(errGrpCtx)
 
 	// Initialize all servers and routers first
@@ -164,8 +176,24 @@ func main() {
 		// Graceful shutdown on context cancellation
 		go func() {
 			<-errGrpCtx.Done()
-			httpServer.Shutdown(context.Background())
-			slog.Info("Gracefully shutdown HTTP Server....")
+
+			// 1. Mark as draining to reject new requests with 503
+			gateway.GlobalConnectionTracker.StartDraining()
+
+			// Use a 30-second drain timeout
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer shutdownCancel()
+
+			// 2. Wait for active tracked requests to finish
+			if err := gateway.GlobalConnectionTracker.Wait(shutdownCtx); err != nil {
+				slog.Error("In-flight requests draining timeout/error", "error", err)
+			}
+
+			// 3. Close the listener and idle connections
+			if err := httpServer.Shutdown(shutdownCtx); err != nil {
+				slog.Error("HTTP server shutdown error (forcing close)", "error", err)
+			}
+			slog.Info("Gracefully shutdown HTTP Server")
 		}()
 
 		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
@@ -182,8 +210,19 @@ func main() {
 		// Graceful shutdown on context cancellation
 		go func() {
 			<-errGrpCtx.Done()
-			httpsServer.Shutdown(context.Background())
-			slog.Info("Gracefully shutdown HTTPS Server....")
+
+			// GlobalConnectionTracker is shared; wait will be called multiple times but it's safe
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer shutdownCancel()
+
+			if err := gateway.GlobalConnectionTracker.Wait(shutdownCtx); err != nil {
+				slog.Error("HTTPS In-flight requests draining timeout/error", "error", err)
+			}
+
+			if err := httpsServer.Shutdown(shutdownCtx); err != nil {
+				slog.Error("HTTPS server shutdown error (forcing close)", "error", err)
+			}
+			slog.Info("Gracefully shutdown HTTPS Server")
 		}()
 
 		if err := httpsServer.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
@@ -200,8 +239,18 @@ func main() {
 		// Graceful shutdown on context cancellation
 		go func() {
 			<-errGrpCtx.Done()
-			adminServer.Shutdown(context.Background())
-			slog.Info("Gracefully shutdown Admin API Server....")
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer shutdownCancel()
+
+			// Admin API should also drain
+			if err := gateway.GlobalConnectionTracker.Wait(shutdownCtx); err != nil {
+				slog.Error("Admin API in-flight requests draining timeout/error", "error", err)
+			}
+
+			if err := adminServer.Shutdown(shutdownCtx); err != nil {
+				slog.Error("Admin API server shutdown error (forcing close)", "error", err)
+			}
+			slog.Info("Gracefully shutdown Admin API Server")
 		}()
 
 		if err := adminServer.ListenAndServe(); err != http.ErrServerClosed {

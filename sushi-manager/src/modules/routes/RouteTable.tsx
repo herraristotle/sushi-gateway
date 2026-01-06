@@ -32,6 +32,12 @@ function RouteTable({ routes }: RouteTableProps) {
           </th>
           <th className="px-6 py-3">
             <div className="flex flex-row items-center gap-2">
+              <span>upstream tags</span>
+              <IoMdInformationCircle className="text-lg mb-0.5" />
+            </div>
+          </th>
+          <th className="px-6 py-3">
+            <div className="flex flex-row items-center gap-2">
               <span>service</span>
               <IoMdInformationCircle className="text-lg mb-0.5" />
             </div>
@@ -84,6 +90,20 @@ function RouteTableRow({ route }: RouteTableRowProps) {
             route.methods.map((method: any, i: number) => {
               return <HttpMethodTag method={method} key={i} />;
             })}
+        </td>
+
+        <td scope="row" className="px-6 py-4 font-medium whitespace-nowrap">
+          <div className="flex gap-1">
+            {route.upstream_tags && route.upstream_tags.length > 0 ? (
+              route.upstream_tags.map((tag: string, i: number) => (
+                <span key={i} className="bg-purple-50 text-purple-700 text-[10px] px-1.5 py-0.5 rounded border border-purple-100 uppercase tracking-tighter font-sans">
+                  {tag}
+                </span>
+              ))
+            ) : (
+              <span className="text-gray-400 text-[10px]">-</span>
+            )}
+          </div>
         </td>
 
         <td scope="row" className="px-6 py-4 font-medium whitespace-nowrap">

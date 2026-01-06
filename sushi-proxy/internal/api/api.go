@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/container"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/gateway"
 	"github.com/rs/cors"
 )
 
@@ -16,6 +17,7 @@ const DEFAULT_CORS_ORIGIN = "http://localhost:5173"
 func NewAdminApiRouter() http.Handler {
 	slog.Info("Creating new admin api router...")
 	router := chi.NewRouter()
+	router.Use(gateway.GlobalConnectionTracker.Track)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 

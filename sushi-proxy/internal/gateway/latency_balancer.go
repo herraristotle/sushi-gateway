@@ -111,11 +111,15 @@ func RecordLatency(serviceName, upstreamId string, duration time.Duration) {
 }
 
 // handleLatency implements the latency-based load balancing using Power of Two Choices
-func (lb *LoadBalancer) handleLatency(service model.Service) int {
+func (lb *LoadBalancer) handleLatency(service model.Service, tags []string) int {
 	if len(service.Upstreams) == 0 {
 		return model.NoUpstreamsAvailable
 	}
 	if len(service.Upstreams) == 1 {
+		// Even for single upstream, check tags
+		if !tagsMatch(service.Upstreams[0].Tags, tags) {
+			return model.NoUpstreamsAvailable
+		}
 		return 0
 	}
 
@@ -123,6 +127,9 @@ func (lb *LoadBalancer) handleLatency(service model.Service) int {
 	var candidateIndices []int
 	if service.Health.Enabled {
 		for i, u := range service.Upstreams {
+			if !tagsMatch(u.Tags, tags) {
+				continue
+			}
 			if state, exists := lb.healthChecker.serviceHealthMap[service.Name][u.Id]; exists {
 				if state.Status == Healthy {
 					candidateIndices = append(candidateIndices, i)
@@ -133,8 +140,10 @@ func (lb *LoadBalancer) handleLatency(service model.Service) int {
 			return model.NoUpstreamsAvailable
 		}
 	} else {
-		for i := range service.Upstreams {
-			candidateIndices = append(candidateIndices, i)
+		for i, u := range service.Upstreams {
+			if tagsMatch(u.Tags, tags) {
+				candidateIndices = append(candidateIndices, i)
+			}
 		}
 	}
 

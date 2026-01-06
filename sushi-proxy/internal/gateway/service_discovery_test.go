@@ -51,7 +51,7 @@ func TestSelectUpstream_ServiceDiscovery(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/api/users", nil)
 
-	_, url, err := proxy.selectUpstream(&service, req)
+	_, url, _, err := proxy.selectUpstream(&service, req)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestSelectUpstream_ServiceDiscovery(t *testing.T) {
 		ServiceName: "unknown",
 	}
 
-	_, _, errUnknown := proxy.selectUpstream(&serviceUnknown, req)
+	_, _, _, errUnknown := proxy.selectUpstream(&serviceUnknown, req)
 	if errUnknown == nil {
 		t.Error("Expected error for unknown service")
 	}
@@ -76,7 +76,7 @@ func TestSelectUpstream_ServiceDiscovery(t *testing.T) {
 		URL:  "http://static:9090",
 	}
 
-	_, urlStatic, errStatic := proxy.selectUpstream(&serviceStatic, req)
+	_, urlStatic, _, errStatic := proxy.selectUpstream(&serviceStatic, req)
 	if errStatic != nil {
 		t.Errorf("Unexpected error: %v", errStatic)
 	}

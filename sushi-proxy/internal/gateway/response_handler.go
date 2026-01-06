@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/constant"
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/util"
 )
 
@@ -52,12 +53,32 @@ func (plugin ResponseHandlerPlugin) Execute(next http.Handler) http.Handler {
 		*r = *r.WithContext(ctx)
 
 		// Record Prometheus Metrics
-		service, route, err := util.GetServiceAndRouteFromRequest(GetGlobalProxyConfig(), r)
-		serviceName := "unknown"
-		routeName := "unknown"
-		if err == nil {
+		// Try getting from context first (Optimized path)
+		var service *model.Service
+		var route *model.Route
+		var serviceName, routeName string
+
+		if s, ok := ctx.Value(constant.CONTEXT_MATCHED_SERVICE).(*model.Service); ok {
+			service = s
 			serviceName = service.Name
+		}
+		if rt, ok := ctx.Value(constant.CONTEXT_MATCHED_ROUTE).(*model.Route); ok {
+			route = rt
 			routeName = route.Name
+		}
+
+		// Fallback to legacy lookup if context missing
+		if service == nil || route == nil {
+			s, rt, err := util.GetServiceAndRouteFromRequest(GetGlobalProxyConfig(), r)
+			if err == nil {
+				service = s
+				route = rt
+				serviceName = service.Name
+				routeName = route.Name
+			} else {
+				serviceName = "unknown"
+				routeName = "unknown"
+			}
 		}
 
 		startTime, ok := ctx.Value(constant.CONTEXT_START_TIME).(time.Time)

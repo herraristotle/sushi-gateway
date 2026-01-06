@@ -74,6 +74,8 @@ func (pv *PluginValidator) createPluginFromConfig(plugin model.PluginConfig) *Pl
 		return NewShadowTrafficPlugin(plugin.Config)
 	case constant.PLUGIN_MULTI_AUTH:
 		return NewMultiAuthPlugin(plugin.Config)
+	case constant.PLUGIN_REQUEST_TERMINATION:
+		return NewRequestTerminationPlugin(plugin.Config)
 	case constant.PLUGIN_PROMETHEUS, constant.PLUGIN_OPENTELEMETRY:
 		// Observability plugins are validated differently or have simple configs
 		return &Plugin{Name: plugin.Name}

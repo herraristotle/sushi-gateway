@@ -92,11 +92,18 @@ func (h *AggregationHandler) HandleAggregation(w http.ResponseWriter, r *http.Re
 	// Use errgroup for parallel execution with proper error handling
 	g, ctx := errgroup.WithContext(ctx)
 
+	// Read body ONCE, upfront
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		r.Body.Close()
+	}
+
 	for i, backend := range backends {
 		i, backend := i, backend // Capture loop variables
 
 		g.Go(func() error {
-			result := h.callBackend(ctx, r, &backend)
+			result := h.callBackend(ctx, r, &backend, bodyBytes)
 
 			mu.Lock()
 			results[i] = result
@@ -145,7 +152,7 @@ func (h *AggregationHandler) HandleAggregation(w http.ResponseWriter, r *http.Re
 }
 
 // callBackend makes an HTTP request to a single backend
-func (h *AggregationHandler) callBackend(ctx context.Context, originalReq *http.Request, backend *model.Backend) BackendResult {
+func (h *AggregationHandler) callBackend(ctx context.Context, originalReq *http.Request, backend *model.Backend, bodyBytes []byte) BackendResult {
 	startTime := time.Now()
 
 	result := BackendResult{
@@ -179,14 +186,9 @@ func (h *AggregationHandler) callBackend(ctx context.Context, originalReq *http.
 	h.copyHeaders(originalReq, req)
 
 	// Copy body for POST/PUT/PATCH
-	if originalReq.Body != nil && (originalReq.Method == http.MethodPost ||
+	if len(bodyBytes) > 0 && (originalReq.Method == http.MethodPost ||
 		originalReq.Method == http.MethodPut || originalReq.Method == http.MethodPatch) {
-		bodyBytes, err := io.ReadAll(originalReq.Body)
-		if err == nil {
-			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-			// Restore original body for other backends
-			originalReq.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		}
+		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
 	slog.Debug("Calling backend", "name", backend.Name, "url", url)

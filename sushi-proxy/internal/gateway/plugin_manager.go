@@ -103,6 +103,8 @@ func (pm *PluginManager) loadConfig(pc model.PluginConfig) *model.HttpError {
 		EnableMetrics(pc.Config)
 	case constant.PLUGIN_OPENTELEMETRY:
 		EnableTracing(pc.Config)
+	case constant.PLUGIN_REQUEST_TERMINATION:
+		pm.RegisterPlugin(NewRequestTerminationPlugin(pc.Config))
 	}
 	return nil
 }

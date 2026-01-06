@@ -3,10 +3,8 @@ module github.com/rawsashimi1604/sushi-gateway/sushi-proxy
 go 1.24.0
 
 require (
-	github.com/buraksezer/consistent v0.10.0
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/cespare/xxhash v1.1.0
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/golang-jwt/jwt/v5 v5.2.2

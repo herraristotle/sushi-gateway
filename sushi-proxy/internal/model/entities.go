@@ -6,6 +6,26 @@ type ProxyConfig struct {
 	Upstreams []UpstreamConfig `json:"upstreams,omitempty" yaml:"upstreams,omitempty"`
 	Plugins   []PluginConfig   `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 	Services  []Service        `json:"services" yaml:"services"`
+	Consumers []Consumer       `json:"consumers,omitempty" yaml:"consumers,omitempty"`
+}
+
+type Consumer struct {
+	Username           string              `json:"username" yaml:"username"`
+	CustomId           string              `json:"custom_id,omitempty" yaml:"custom_id,omitempty"`
+	Tags               []string            `json:"tags,omitempty" yaml:"tags,omitempty"`
+	JwtSecrets         []JwtSecret         `json:"jwt_secrets,omitempty" yaml:"jwt_secrets,omitempty"`
+	KeyAuthCredentials []KeyAuthCredential `json:"keyauth_credentials,omitempty" yaml:"keyauth_credentials,omitempty"`
+}
+
+type JwtSecret struct {
+	Algorithm    string `json:"algorithm,omitempty" yaml:"algorithm,omitempty"`
+	Key          string `json:"key,omitempty" yaml:"key,omitempty"`
+	Secret       string `json:"secret,omitempty" yaml:"secret,omitempty"`
+	RsaPublicKey string `json:"rsa_public_key,omitempty" yaml:"rsa_public_key,omitempty"`
+}
+
+type KeyAuthCredential struct {
+	Key string `json:"key" yaml:"key"`
 }
 
 type PluginConfig struct {
@@ -25,11 +45,13 @@ type UpstreamConfig struct {
 	ConnectTimeout int                    `json:"connect_timeout,omitempty" yaml:"connect_timeout,omitempty"`
 	ReadTimeout    int                    `json:"read_timeout,omitempty" yaml:"read_timeout,omitempty"`
 	WriteTimeout   int                    `json:"write_timeout,omitempty" yaml:"write_timeout,omitempty"`
+	Slots          int                    `json:"slots,omitempty" yaml:"slots,omitempty"` // Number of slots for the upstream ring (default 10000)
 	// Hash-based routing configuration (Kong parity)
 	HashOn             HashOnType `json:"hash_on,omitempty" yaml:"hash_on,omitempty"`                           // none, consumer, ip, header, cookie, path, query_arg
 	HashFallback       HashOnType `json:"hash_fallback,omitempty" yaml:"hash_fallback,omitempty"`               // Fallback if primary hash fails
 	HashOnHeader       string     `json:"hash_on_header,omitempty" yaml:"hash_on_header,omitempty"`             // Header name when hash_on=header
 	HashOnCookie       string     `json:"hash_on_cookie,omitempty" yaml:"hash_on_cookie,omitempty"`             // Cookie name when hash_on=cookie
+	HashOnCookiePath   string     `json:"hash_on_cookie_path,omitempty" yaml:"hash_on_cookie_path,omitempty"`   // Cookie path
 	HashOnQueryArg     string     `json:"hash_on_query_arg,omitempty" yaml:"hash_on_query_arg,omitempty"`       // Query param when hash_on=query_arg
 	HashFallbackHeader string     `json:"hash_fallback_header,omitempty" yaml:"hash_fallback_header,omitempty"` // Header for fallback
 }
@@ -75,9 +97,10 @@ type UnhealthyConfig struct {
 }
 
 type UpstreamTarget struct {
-	Id     string `json:"id" yaml:"id"`
-	Target string `json:"target" yaml:"target"`
-	Weight int    `json:"weight" yaml:"weight"`
+	Id     string   `json:"id" yaml:"id"`
+	Target string   `json:"target" yaml:"target"`
+	Weight int      `json:"weight" yaml:"weight"`
+	Tags   []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 }
 
 type Health struct {
@@ -91,12 +114,16 @@ type Route struct {
 	Paths   []string          `json:"paths,omitempty" yaml:"paths,omitempty"`     // Kong-style: multiple paths per route
 	Methods []string          `json:"methods,omitempty" yaml:"methods,omitempty"` // Optional: empty = all methods
 	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	Plugins []PluginConfig    `json:"plugins,omitempty" yaml:"plugins,omitempty"`
+	// If set, only upstreams matching ALL tags will be selected
+	UpstreamTags []string       `json:"upstream_tags,omitempty" yaml:"upstream_tags,omitempty"`
+	Plugins      []PluginConfig `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 	// Backends for Response Aggregation (BFF pattern)
 	// If specified, the gateway will call all backends in parallel and merge responses
 	Backends []Backend `json:"backends,omitempty" yaml:"backends,omitempty"`
 	// StripPath indicates if the matched path prefix should be removed before forwarding to upstream
 	StripPath *bool `json:"strip_path,omitempty" yaml:"strip_path,omitempty"`
+	// PreserveHost indicates if the original Host header should be sent to the upstream
+	PreserveHost *bool `json:"preserve_host,omitempty" yaml:"preserve_host,omitempty"`
 }
 
 // Backend represents a single backend for response aggregation
@@ -145,6 +172,8 @@ type Service struct {
 	TLS                   UpstreamTLS            `json:"tls,omitempty" yaml:"tls,omitempty"`
 	// Link to UpstreamConfig health checks
 	UpstreamHealthChecks *HealthCheckConfig `json:"-" yaml:"-"`
+	// Internal Runtime Cache
+	TransportCacheKey string `json:"-" yaml:"-"`
 }
 
 type UpstreamTLS struct {

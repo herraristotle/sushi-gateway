@@ -16,4 +16,8 @@ const (
 
 	// Authentication
 	CONTEXT_CONSUMER_ID = "consumer_id"
+
+	// Routing
+	CONTEXT_MATCHED_SERVICE = "matched_service"
+	CONTEXT_MATCHED_ROUTE   = "matched_route"
 )

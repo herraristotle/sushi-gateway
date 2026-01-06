@@ -90,13 +90,13 @@ func TestLoadBalancer_RoundRobin_UnhealthyUpstreams(t *testing.T) {
 
 			if tt.expectNoUpstream {
 				// Test that we get NoUpstreamsAvailable when all are unhealthy
-				result := lb.GetNextUpstream(service, "")
+				result := lb.GetNextUpstream(service, "", nil)
 				assert.Equal(t, model.NoUpstreamsAvailable, result,
 					"Expected NoUpstreamsAvailable when all upstreams are unhealthy")
 			} else {
 				// Test the sequence of returned indexes
 				for _, expectedIdx := range tt.expectedIndexes {
-					result := lb.GetNextUpstream(service, "")
+					result := lb.GetNextUpstream(service, "", nil)
 					assert.Equal(t, expectedIdx, result,
 						"Expected upstream index %d but got %d", expectedIdx, result)
 				}
@@ -149,7 +149,7 @@ func TestLoadBalancer_RoundRobin_SingleUpstream(t *testing.T) {
 			}
 
 			lb := NewLoadBalancer(healthChecker)
-			result := lb.GetNextUpstream(service, "")
+			result := lb.GetNextUpstream(service, "", nil)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -182,29 +182,29 @@ func TestLoadBalancer_RoundRobin_HealthStateTransitions(t *testing.T) {
 	ResetLoadBalancers()
 
 	// Initially both healthy, should round robin
-	assert.Equal(t, 0, lb.GetNextUpstream(service, ""))
-	assert.Equal(t, 1, lb.GetNextUpstream(service, ""))
+	assert.Equal(t, 0, lb.GetNextUpstream(service, "", nil))
+	assert.Equal(t, 1, lb.GetNextUpstream(service, "", nil))
 
 	// Mark upstream1 as unhealthy
 	healthChecker.serviceHealthMap["test-service"]["upstream1"] = &UpstreamHealthState{Status: Unhealthy}
 
 	// Should only return upstream2
-	assert.Equal(t, 1, lb.GetNextUpstream(service, ""))
-	assert.Equal(t, 1, lb.GetNextUpstream(service, ""))
+	assert.Equal(t, 1, lb.GetNextUpstream(service, "", nil))
+	assert.Equal(t, 1, lb.GetNextUpstream(service, "", nil))
 
 	// Mark upstream1 as healthy again
 	healthChecker.serviceHealthMap["test-service"]["upstream1"] = &UpstreamHealthState{Status: Healthy}
 
 	// Should resume round robin from last position
-	assert.Equal(t, 0, lb.GetNextUpstream(service, ""))
-	assert.Equal(t, 1, lb.GetNextUpstream(service, ""))
+	assert.Equal(t, 0, lb.GetNextUpstream(service, "", nil))
+	assert.Equal(t, 1, lb.GetNextUpstream(service, "", nil))
 
 	// Mark both as unhealthy
 	healthChecker.serviceHealthMap["test-service"]["upstream1"] = &UpstreamHealthState{Status: Unhealthy}
 	healthChecker.serviceHealthMap["test-service"]["upstream2"] = &UpstreamHealthState{Status: Unhealthy}
 
 	// Should return no upstreams available
-	assert.Equal(t, model.NoUpstreamsAvailable, lb.GetNextUpstream(service, ""))
+	assert.Equal(t, model.NoUpstreamsAvailable, lb.GetNextUpstream(service, "", nil))
 }
 
 func TestLoadBalancer_RoundRobin_HealthCheckDisabled(t *testing.T) {
@@ -254,7 +254,7 @@ func TestLoadBalancer_RoundRobin_HealthCheckDisabled(t *testing.T) {
 
 			// Test the sequence of returned indexes
 			for _, expectedIdx := range tt.expectedIndexes {
-				result := lb.GetNextUpstream(service, "")
+				result := lb.GetNextUpstream(service, "", nil)
 				assert.Equal(t, expectedIdx, result,
 					"Expected upstream index %d but got %d when health check disabled", expectedIdx, result)
 			}
@@ -311,7 +311,7 @@ func TestLoadBalancer_IPHash_ConsistentHashing(t *testing.T) {
 			lb := NewLoadBalancer(healthChecker)
 
 			// First run to get initial mapping
-			firstIndex := lb.handleIPHash(service, tt.clientIP)
+			firstIndex := lb.handleIPHash(service, tt.clientIP, nil)
 
 			// Verify the index is valid
 			assert.GreaterOrEqual(t, firstIndex, 0)
@@ -319,7 +319,7 @@ func TestLoadBalancer_IPHash_ConsistentHashing(t *testing.T) {
 
 			// Run multiple times to verify consistency
 			for i := 0; i < tt.runCount; i++ {
-				index := lb.handleIPHash(service, tt.clientIP)
+				index := lb.handleIPHash(service, tt.clientIP, nil)
 				// Same IP should always map to the same upstream
 				assert.Equal(t, firstIndex, index,
 					"Same IP should map to same upstream on multiple calls")
@@ -331,7 +331,7 @@ func TestLoadBalancer_IPHash_ConsistentHashing(t *testing.T) {
 				if tt.clientIP == differentIP {
 					differentIP = "192.168.1.200"
 				}
-				differentIndex := lb.handleIPHash(service, differentIP)
+				differentIndex := lb.handleIPHash(service, differentIP, nil)
 				// Note: There's a small chance this could fail if the hash happens to map to the same upstream
 				// This is expected and acceptable in a real-world scenario
 				if differentIndex == firstIndex {
@@ -411,7 +411,7 @@ func TestLoadBalancer_IPHash_HealthCheck(t *testing.T) {
 			}
 
 			lb := NewLoadBalancer(healthChecker)
-			result := lb.handleIPHash(service, tt.clientIP)
+			result := lb.handleIPHash(service, tt.clientIP, nil)
 
 			if tt.expectNoUpstream {
 				assert.Equal(t, model.NoUpstreamsAvailable, result,
@@ -477,7 +477,7 @@ func TestLoadBalancer_IPHash_SingleUpstream(t *testing.T) {
 			}
 
 			lb := NewLoadBalancer(healthChecker)
-			result := lb.handleIPHash(service, tt.clientIP)
+			result := lb.handleIPHash(service, tt.clientIP, nil)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -588,8 +588,21 @@ func TestLoadBalancer_Weighted(t *testing.T) {
 			}
 			lb := NewLoadBalancer(healthChecker)
 
+			// Pre-warm the cache to bypass Slow Start
+			wrapper := &WeightedServiceState{
+				States: make(map[string]*WeightedState),
+			}
+			past := time.Now().Add(-2 * time.Hour) // Long enough to be full weight
+			wrapper.States["upstream1"] = &WeightedState{
+				FirstSeenAt: past,
+			}
+			wrapper.States["upstream2"] = &WeightedState{
+				FirstSeenAt: past,
+			}
+			weightedCache.Store(service.Name, wrapper)
+
 			for i, expectedIdx := range tt.expectedIndexes {
-				result := lb.GetNextUpstream(service, "")
+				result := lb.GetNextUpstream(service, "", nil)
 				assert.Equal(t, expectedIdx, result,
 					"Step %d: Expected upstream index %d but got %d", i, expectedIdx, result)
 			}
@@ -626,7 +639,7 @@ func TestLoadBalancer_Weighted_HealthCheck(t *testing.T) {
 
 	// Since upstream1 is unhealthy, ALL requests must go to upstream2 (index 1)
 	for i := 0; i < 5; i++ {
-		result := lb.GetNextUpstream(service, "")
+		result := lb.GetNextUpstream(service, "", nil)
 		assert.Equal(t, 1, result, "Should always pick healthy upstream")
 	}
 }
@@ -690,7 +703,7 @@ func TestLoadBalancer_LeastConnections_WeightAware(t *testing.T) {
 				tt.preSetup()
 			}
 
-			result := lb.GetNextUpstream(service, "")
+			result := lb.GetNextUpstream(service, "", nil)
 			assert.Equal(t, tt.expectedUpstream, result, tt.description)
 		})
 	}
@@ -767,7 +780,7 @@ func TestLoadBalancer_Latency_EWMA(t *testing.T) {
 				tt.preSetup()
 			}
 
-			result := lb.GetNextUpstream(service, "")
+			result := lb.GetNextUpstream(service, "", nil)
 			assert.Equal(t, tt.expectedUpstream, result, tt.description)
 		})
 	}
@@ -810,7 +823,7 @@ func TestLoadBalancer_Latency_HealthCheck(t *testing.T) {
 	}
 
 	lb := NewLoadBalancer(healthChecker)
-	result := lb.GetNextUpstream(service, "")
+	result := lb.GetNextUpstream(service, "", nil)
 
 	// Should pick upstream2 (index 1) - fastest among healthy ones
 	assert.Equal(t, 1, result, "Should pick fastest healthy upstream (upstream2)")
@@ -838,14 +851,14 @@ func TestLoadBalancer_ConsistentHashing_Algorithm(t *testing.T) {
 	lb := NewLoadBalancer(healthChecker)
 
 	// Same key should always map to same upstream
-	firstResult := lb.GetNextUpstream(service, "session-123")
+	firstResult := lb.GetNextUpstream(service, "session-123", nil)
 	for i := 0; i < 10; i++ {
-		result := lb.GetNextUpstream(service, "session-123")
+		result := lb.GetNextUpstream(service, "session-123", nil)
 		assert.Equal(t, firstResult, result, "Same key should map to same upstream")
 	}
 
 	// Different keys may map to different upstreams
-	differentResult := lb.GetNextUpstream(service, "session-456")
+	differentResult := lb.GetNextUpstream(service, "session-456", nil)
 	// Note: Could be same due to hash collision, that's expected
 	t.Logf("session-123 maps to %d, session-456 maps to %d", firstResult, differentResult)
 }
