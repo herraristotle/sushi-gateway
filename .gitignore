@@ -14,7 +14,7 @@
 *.so
 *.dylib
 main
-
+*.bin
 # Vitepress docs
 docs/.vitepress/cache/
 docs/.vitepress/dist
