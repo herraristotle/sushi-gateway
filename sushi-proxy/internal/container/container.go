@@ -22,7 +22,14 @@ type AppConfig struct {
 	RedisPassword string
 	RedisDB       int
 	DbPath        string
+	// Gateway Operation Mode
+	Mode string // "db" or "dbless"
 }
+
+const (
+	ModeDB     = "db"
+	ModeDBLess = "dbless"
+)
 
 // CaCertPool wraps the certificate pool for mTLS
 type CaCertPool struct {

@@ -160,20 +160,17 @@ func validatePlugins(config *model.ProxyConfig) error {
 	return nil
 }
 
+// validateServices checks that service names are unique.
+// Note: base_path uniqueness is no longer strictly enforced to support Kong-style flat routing
+// where multiple services might share the same base path (e.g. '/') and differentiate by route.
 func validateServices(config *model.ProxyConfig) error {
 	var serviceNames []string
-	var servicePaths []string
 	serviceValidator := NewServiceValidator()
 
 	for _, service := range config.Services {
 		// Name
 		if util.SliceContainsString(serviceNames, service.Name) {
 			return fmt.Errorf("service name: %s must be unique", service.Name)
-		}
-
-		// Path
-		if util.SliceContainsString(servicePaths, service.BasePath) {
-			return fmt.Errorf("service path: %s must be unique", service.BasePath)
 		}
 
 		// Generic service validations
@@ -184,7 +181,6 @@ func validateServices(config *model.ProxyConfig) error {
 		// TODO: add validation for service route paths and methods, they must be unique.
 
 		serviceNames = append(serviceNames, service.Name)
-		servicePaths = append(servicePaths, service.BasePath)
 	}
 	return nil
 }

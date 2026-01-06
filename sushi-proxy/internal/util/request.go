@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -8,9 +9,22 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 )
+
+func GetContextTime(ctx context.Context, key string) time.Time {
+	val := ctx.Value(key)
+	if val == nil {
+		return time.Time{}
+	}
+	t, ok := val.(time.Time)
+	if !ok {
+		return time.Time{}
+	}
+	return t
+}
 
 func GetServiceAndRouteFromRequest(proxyConfig *model.ProxyConfig, req *http.Request) (*model.Service, *model.Route, *model.HttpError) {
 	path := req.URL.Path

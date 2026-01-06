@@ -181,6 +181,40 @@ var (
 		},
 		[]string{"plugin"},
 	)
+
+	// Connection Pool metrics
+	PoolActiveConnections = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "sushi_gateway_pool_active_connections",
+			Help: "Number of active connections in the transport pool per upstream",
+		},
+		[]string{"service", "upstream"},
+	)
+
+	PoolIdleConnections = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "sushi_gateway_pool_idle_connections",
+			Help: "Number of idle connections in the transport pool per upstream",
+		},
+		[]string{"service", "upstream"},
+	)
+
+	// Config Reload metrics
+	ConfigReloadTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "sushi_gateway_config_reloads_total",
+			Help: "Total number of configuration reloads",
+		},
+		[]string{"status"}, // success, failure
+	)
+
+	ConfigReloadDuration = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "sushi_gateway_config_reload_duration_seconds",
+			Help:    "Duration of configuration reloads",
+			Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1, 5},
+		},
+	)
 )
 
 // RecordRequest records a completed request with its metrics
@@ -314,6 +348,43 @@ func RecordPluginExecution(pluginName string, durationSeconds float64) {
 		return
 	}
 	PluginExecutionDuration.WithLabelValues(pluginName).Observe(durationSeconds)
+}
+
+// RecordPoolActiveConnections sets the active connections gauge
+func RecordPoolActiveConnections(service, upstream string, count float64) {
+	if !EnablePrometheus {
+		return
+	}
+	PoolActiveConnections.WithLabelValues(service, upstream).Set(count)
+}
+
+// IncPoolActiveConnections increments active connections
+func IncPoolActiveConnections(service, upstream string) {
+	if !EnablePrometheus {
+		return
+	}
+	PoolActiveConnections.WithLabelValues(service, upstream).Inc()
+}
+
+// DecPoolActiveConnections decrements active connections
+func DecPoolActiveConnections(service, upstream string) {
+	if !EnablePrometheus {
+		return
+	}
+	PoolActiveConnections.WithLabelValues(service, upstream).Dec()
+}
+
+// RecordConfigReload records a config reload event
+func RecordConfigReload(success bool, durationSeconds float64) {
+	if !EnablePrometheus {
+		return
+	}
+	status := "success"
+	if !success {
+		status = "failure"
+	}
+	ConfigReloadTotal.WithLabelValues(status).Inc()
+	ConfigReloadDuration.Observe(durationSeconds)
 }
 
 // Helper to convert status code to label category

@@ -188,7 +188,14 @@ func (plugin HeaderTransformationPlugin) Execute(next http.Handler) http.Handler
 						consumerID := r.Header.Get("x-consumer-id")
 						value = strings.ReplaceAll(value, "$(headers['x-consumer-id'] or '')", consumerID)
 					}
-					// Add more substitutions here if needed for full parity
+					if strings.Contains(value, "headers['x-consumer-username']") {
+						username := r.Header.Get("x-consumer-username")
+						value = strings.ReplaceAll(value, "$(headers['x-consumer-username'] or '')", username)
+					}
+					if strings.Contains(value, "headers['x-authenticated-userid']") {
+						userID := r.Header.Get("x-authenticated-userid")
+						value = strings.ReplaceAll(value, "$(headers['x-authenticated-userid'] or '')", userID)
+					}
 				}
 
 				slog.Debug("Adding header", "header", key, "value", value)

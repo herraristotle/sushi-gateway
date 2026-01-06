@@ -64,6 +64,12 @@ func BuildRouterFromConfig(config *model.ProxyConfig, proxy *SushiProxy) *chi.Mu
 
 	for _, svc := range config.Services {
 		svc := svc // capture loop var
+		basePath := svc.BasePath
+		if basePath != "" && !strings.HasPrefix(basePath, "/") {
+			basePath = "/" + basePath
+		}
+		basePath = strings.TrimSuffix(basePath, "/")
+
 		for _, rt := range svc.Routes {
 			rt := rt // capture loop var
 
@@ -71,25 +77,32 @@ func BuildRouterFromConfig(config *model.ProxyConfig, proxy *SushiProxy) *chi.Mu
 			handler := proxy.createHandlerForRoute(&svc, &rt)
 
 			for _, path := range rt.Paths {
+				fullPath := basePath + path
+				if !strings.HasPrefix(fullPath, "/") {
+					fullPath = "/" + fullPath
+				}
+
 				// Handle prefix matching for Chi
-				// If path is "/api", we want to match "/api", "/api/" and "/api/*"
-				// Chi handles specific paths.
-				registerPath := path
+				registerPath := fullPath
 				if !strings.HasSuffix(registerPath, "*") {
 					if strings.HasSuffix(registerPath, "/") {
 						registerPath += "*"
 					} else {
 						registerPath += "/*"
 						// Also register exact match
-						router.Handle(path, handler)
+						router.Handle(fullPath, handler)
 					}
 				}
 				router.Handle(registerPath, handler)
 			}
 			// Legacy path support
 			if rt.Path != "" {
-				router.Handle(rt.Path+"/*", handler)
-				router.Handle(rt.Path, handler)
+				fullPath := basePath + rt.Path
+				if !strings.HasPrefix(fullPath, "/") {
+					fullPath = "/" + fullPath
+				}
+				router.Handle(fullPath+"/*", handler)
+				router.Handle(fullPath, handler)
 			}
 		}
 	}
@@ -224,6 +237,7 @@ func (proxy *SushiProxy) RegisterRoutes(router chi.Router) {
 }
 
 func (proxy *SushiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	slog.Info("Proxy ServeHTTP incoming", "path", r.URL.Path, "method", r.Method)
 	router := proxy.router.Load()
 	if router == nil {
 		http.Error(w, "Router not initialized", http.StatusServiceUnavailable)
@@ -437,9 +451,18 @@ func (s *SushiProxy) HandleProxyPass(w http.ResponseWriter, req *http.Request, m
 			}
 		}
 		// Wrap transport with per-target circuit breaker
-		proxy.Transport = &CircuitBreakerTransport{
-			Target: selectedUpstream.Target,
-			Base:   transport,
+		cbTransport := &CircuitBreakerTransport{
+			Target:     selectedUpstream.Target,
+			Service:    matchedService,
+			UpstreamID: selectedUpstream.Id,
+			Base:       transport,
+		}
+
+		// Wrap with metrics transport (active connection tracking)
+		proxy.Transport = &MetricsTransport{
+			Base:     cbTransport,
+			Service:  matchedService.Name,
+			Upstream: selectedUpstream.Id,
 		}
 
 		originalDirector := proxy.Director
@@ -782,4 +805,17 @@ func singleJoiningSlash(a, b string) string {
 		return a + "/" + b
 	}
 	return a + b
+}
+
+// MetricsTransport wraps an http.RoundTripper to record connection metrics
+type MetricsTransport struct {
+	Base     http.RoundTripper
+	Service  string
+	Upstream string
+}
+
+func (t *MetricsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	IncPoolActiveConnections(t.Service, t.Upstream)
+	defer DecPoolActiveConnections(t.Service, t.Upstream)
+	return t.Base.RoundTrip(req)
 }

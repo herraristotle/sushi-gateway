@@ -44,6 +44,10 @@ func validateServiceLoadBalancing(service *model.Service) error {
 }
 
 func validateBasePath(service *model.Service) error {
+	if service.BasePath == "" {
+		service.BasePath = "/"
+		return nil
+	}
 	if !strings.HasPrefix(service.BasePath, "/") {
 		return fmt.Errorf("service path: %s must start with /", service.BasePath)
 	}

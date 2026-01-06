@@ -97,13 +97,25 @@ func (plugin HttpLogPlugin) parseConfig() *HttpLogConfig {
 
 func (plugin HttpLogPlugin) createLogBody(r *http.Request) (map[string]interface{}, *model.HttpError) {
 
-	// Get the service and route from the request
-	globalConfig := GetGlobalProxyConfig()
-	service, route, err := util.GetServiceAndRouteFromRequest(globalConfig, r)
-	if err != nil {
-		return nil, model.NewHttpError(500, "ERR_PARSING_SERVICE_ROUTE",
-			"Error parsing service and route from request")
+	ctx := r.Context()
+	// Get the service and route from the request context (already matched by SushiProxy)
+	serviceVal := ctx.Value(constant.CONTEXT_MATCHED_SERVICE)
+	routeVal := ctx.Value(constant.CONTEXT_MATCHED_ROUTE)
+
+	if serviceVal == nil || routeVal == nil {
+		// Fallback to legacy lookup if context not set
+		globalConfig := GetGlobalProxyConfig()
+		service, route, err := util.GetServiceAndRouteFromRequest(globalConfig, r)
+		if err != nil {
+			return nil, model.NewHttpError(500, "ERR_PARSING_SERVICE_ROUTE",
+				"Error parsing service and route from request")
+		}
+		serviceVal = service
+		routeVal = route
 	}
+
+	service := serviceVal.(*model.Service)
+	route := routeVal.(*model.Route)
 
 	lb := NewLoadBalancer(GlobalHealthChecker)
 
@@ -142,8 +154,8 @@ func (plugin HttpLogPlugin) createLogBody(r *http.Request) (map[string]interface
 		},
 		"latency":    plugin.calculateResponseTime(r),
 		"client_ip":  clientIp,
-		"started_at": r.Context().Value(constant.CONTEXT_START_TIME).(time.Time).UnixMilli(),
-		"ended_at":   r.Context().Value(constant.CONTEXT_END_TIME).(time.Time).UnixMilli(),
+		"started_at": util.GetContextTime(r.Context(), constant.CONTEXT_START_TIME).UnixMilli(),
+		"ended_at":   util.GetContextTime(r.Context(), constant.CONTEXT_END_TIME).UnixMilli(),
 	}
 	return log, nil
 }
@@ -179,8 +191,20 @@ func (plugin HttpLogPlugin) sendLog(log map[string]interface{}, config *HttpLogC
 }
 
 func (plugin HttpLogPlugin) calculateResponseTime(r *http.Request) string {
-	start := r.Context().Value(constant.CONTEXT_START_TIME).(time.Time)
-	end := r.Context().Value(constant.CONTEXT_END_TIME).(time.Time)
+	startVal := r.Context().Value(constant.CONTEXT_START_TIME)
+	endVal := r.Context().Value(constant.CONTEXT_END_TIME)
+
+	if startVal == nil || endVal == nil {
+		return "0ms"
+	}
+
+	start, ok1 := startVal.(time.Time)
+	end, ok2 := endVal.(time.Time)
+
+	if !ok1 || !ok2 {
+		return "0ms"
+	}
+
 	timeTaken := int(end.Sub(start).Milliseconds())
 	return strconv.Itoa(timeTaken) + "ms"
 }

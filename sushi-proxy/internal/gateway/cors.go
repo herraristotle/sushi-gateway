@@ -27,6 +27,28 @@ type CorsPlugin struct {
 }
 
 func NewCorsPlugin(config map[string]interface{}) *Plugin {
+	// Kong Parity: Normalize aliases
+	if _, ok := config["allow_origins"]; !ok {
+		if val, ok := config["origins"]; ok {
+			config["allow_origins"] = val
+		}
+	}
+	if _, ok := config["allow_methods"]; !ok {
+		if val, ok := config["methods"]; ok {
+			config["allow_methods"] = val
+		}
+	}
+	if _, ok := config["allow_headers"]; !ok {
+		if val, ok := config["headers"]; ok {
+			config["allow_headers"] = val
+		}
+	}
+	if _, ok := config["expose_headers"]; !ok {
+		if val, ok := config["exposed_headers"]; ok {
+			config["expose_headers"] = val
+		}
+	}
+
 	return &Plugin{
 		Name:     constant.PLUGIN_CORS,
 		Priority: 0, // Very High Priority
@@ -111,12 +133,20 @@ func (plugin CorsPlugin) Validate() error {
 	}
 
 	// Validate max_age if present
-	if maxAge, exists := plugin.config["max_age"].(float64); exists {
-		if maxAge < 0 {
+	if plugin.config["max_age"] != nil {
+		var maxAgeVal float64
+		if val, ok := plugin.config["max_age"].(float64); ok {
+			maxAgeVal = val
+		} else if val, ok := plugin.config["max_age"].(int); ok {
+			maxAgeVal = float64(val)
+			plugin.config["max_age"] = maxAgeVal // Normalize to float64 for parser
+		} else {
+			return fmt.Errorf("max_age must be a number")
+		}
+
+		if maxAgeVal < 0 {
 			return fmt.Errorf("max_age cannot be negative")
 		}
-	} else if plugin.config["max_age"] != nil {
-		return fmt.Errorf("max_age must be a number")
 	}
 
 	return nil

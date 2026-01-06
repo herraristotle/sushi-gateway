@@ -78,6 +78,27 @@ func (hc *HealthChecker) UpdateHealthState(serviceName string, upstreamId string
 	hc.serviceHealthMap[serviceName][upstreamId] = state
 }
 
+// UpdateHealthStatus allows forcing a status change (e.g. from a circuit breaker)
+func (hc *HealthChecker) UpdateHealthStatus(serviceName string, upstreamId string, status HealthStatus) {
+	hc.mutex.Lock()
+	defer hc.mutex.Unlock()
+
+	if _, ok := hc.serviceHealthMap[serviceName]; !ok {
+		hc.serviceHealthMap[serviceName] = make(map[string]*UpstreamHealthState)
+	}
+
+	state, ok := hc.serviceHealthMap[serviceName][upstreamId]
+	if !ok {
+		state = &UpstreamHealthState{Status: status}
+		hc.serviceHealthMap[serviceName][upstreamId] = state
+	} else if state.Status != status {
+		state.Status = status
+		state.ConsecutiveFailures = 0
+		state.ConsecutiveSuccesses = 0
+		slog.Info("Health status updated via external signal", "service", serviceName, "upstream", upstreamId, "status", status)
+	}
+}
+
 func (hc *HealthChecker) GetHealthStatus(serviceName string, upstreamId string) HealthStatus {
 	hc.mutex.RLock()
 	defer hc.mutex.RUnlock()

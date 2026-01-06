@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/assert"
 )
@@ -27,16 +28,20 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 func TestCircuitBreakerTransport(t *testing.T) {
 	target := "test-target-1"
-	cb := GlobalTargetCBManager.GetBreaker(target)
+	mockService := &model.Service{Name: "test-service"}
+	upstreamID := "u1"
+	cb := GlobalTargetCBManager.GetBreaker(target, mockService, upstreamID)
 
 	// Reset state if needed (sony/gobreaker doesn't have easy reset, but we can just use a unique name)
 	target = fmt.Sprintf("test-target-%d", time.Now().UnixNano())
-	cb = GlobalTargetCBManager.GetBreaker(target)
+	cb = GlobalTargetCBManager.GetBreaker(target, mockService, upstreamID)
 
 	base := &mockRoundTripper{statusCode: 500}
 	transport := &CircuitBreakerTransport{
-		Target: target,
-		Base:   base,
+		Target:     target,
+		Service:    mockService,
+		UpstreamID: upstreamID,
+		Base:       base,
 	}
 
 	// Fail 10 times to trip the breaker (based on our default settings in TargetCBManager)
@@ -57,19 +62,26 @@ func TestCircuitBreakerTransport(t *testing.T) {
 
 func TestTargetCBManager_Allow(t *testing.T) {
 	target := fmt.Sprintf("test-allow-%d", time.Now().UnixNano())
+	mockService := &model.Service{Name: "test-service-allow"}
+	upstreamID := "u2"
 
-	assert.True(t, GlobalTargetCBManager.Allow(target))
+	assert.True(t, GlobalTargetCBManager.Allow(target, mockService, upstreamID))
 
-	cb := GlobalTargetCBManager.GetBreaker(target)
+	cb := GlobalTargetCBManager.GetBreaker(target, mockService, upstreamID)
 
 	// Manually trip it if we could, but we'll use the transport
 	base := &mockRoundTripper{statusCode: 500}
-	transport := &CircuitBreakerTransport{Target: target, Base: base}
+	transport := &CircuitBreakerTransport{
+		Target:     target,
+		Service:    mockService,
+		UpstreamID: upstreamID,
+		Base:       base,
+	}
 
 	for i := 0; i < 10; i++ {
 		_, _ = transport.RoundTrip(httptest.NewRequest("GET", "/", nil))
 	}
 
-	assert.False(t, GlobalTargetCBManager.Allow(target))
+	assert.False(t, GlobalTargetCBManager.Allow(target, mockService, upstreamID))
 	assert.Equal(t, gobreaker.StateOpen, cb.State())
 }

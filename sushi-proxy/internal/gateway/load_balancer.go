@@ -3,6 +3,7 @@ package gateway
 import (
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"math"
 	mathrand "math/rand"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
+	"github.com/sony/gobreaker"
 )
 
 const (
@@ -64,9 +66,23 @@ func NewLoadBalancer(healthChecker *HealthChecker) *LoadBalancer {
 
 // isUpstreamAvailable checks if an upstream is healthy and not short-circuited by its circuit breaker
 func (lb *LoadBalancer) isUpstreamAvailable(service model.Service, u model.UpstreamTarget) bool {
+	// Always check Target Circuit Breaker first
+	cb := GlobalTargetCBManager.GetBreaker(u.Target, &service, u.Id)
+	cbState := cb.State()
+
+	if cbState == gobreaker.StateOpen {
+		return false
+	}
+
 	if service.Health.Enabled {
 		if state, exists := lb.healthChecker.serviceHealthMap[service.Name][u.Id]; exists {
 			if state.Status != Healthy {
+				// If marked unhealthy but CB is HALF-OPEN, we must allow it through to probe for recovery
+				if cbState == gobreaker.StateHalfOpen {
+					slog.Info("Allowing probe to HALF-OPEN upstream", "service", service.Name, "upstream", u.Id)
+					return true
+				}
+				slog.Debug("Upstream unhealthy in map", "service", service.Name, "upstream", u.Id, "cbState", cbState.String())
 				return false
 			}
 		} else {
@@ -75,8 +91,7 @@ func (lb *LoadBalancer) isUpstreamAvailable(service model.Service, u model.Upstr
 		}
 	}
 
-	// Always check Target Circuit Breaker (even if active health check is disabled)
-	return GlobalTargetCBManager.Allow(u.Target)
+	return true
 }
 
 // Gets the index of upstream to forward the request to based on the load balancing algorithm

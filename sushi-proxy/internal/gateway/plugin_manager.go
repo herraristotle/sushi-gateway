@@ -87,12 +87,16 @@ func (pm *PluginManager) loadConfig(pc model.PluginConfig) *model.HttpError {
 		pm.RegisterPlugin(NewCorsPlugin(pc.Config))
 	case constant.PLUGIN_HEADER_TRANSFORMATION:
 		pm.RegisterPlugin(NewHeaderTransformationPlugin(pc.Config))
+	case constant.PLUGIN_REQUEST_TRANSFORMER:
+		// Map "request-transformer" to HeaderTransformationPlugin (parity alias)
+		pm.RegisterPlugin(NewHeaderTransformationPlugin(pc.Config))
 	case constant.PLUGIN_CIRCUIT_BREAKER:
 		pm.RegisterPlugin(NewCircuitBreakerPlugin(pc.Config))
 	case constant.PLUGIN_RBAC:
 		pm.RegisterPlugin(NewRBACPlugin(pc.Config))
-	case constant.PLUGIN_SANITIZATION:
-		pm.RegisterPlugin(NewSanitizationPlugin(pc.Config))
+	case constant.PLUGIN_WAF:
+		// Map "waf" to WAFPlugin
+		pm.RegisterPlugin(NewWAFPlugin(pc.Config))
 	case constant.PLUGIN_CACHE:
 		pm.RegisterPlugin(NewCachePlugin(pc.Config))
 	case constant.PLUGIN_SHADOW_TRAFFIC:

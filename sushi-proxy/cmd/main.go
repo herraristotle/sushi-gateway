@@ -42,10 +42,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize SQL Store for dynamic configuration
-	if err := gateway.InitSQLStore(container.Global.AppConfig.DbPath); err != nil {
-		slog.Error("Failed to initialize SQL store", "error", err)
-		os.Exit(1)
+	// Initialize SQL Store ONLY in DB mode
+	if container.Global.AppConfig.Mode == container.ModeDB {
+		if err := gateway.InitSQLStore(container.Global.AppConfig.DbPath); err != nil {
+			slog.Error("Failed to initialize SQL store", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	// Initialize Redis client (required for distributed rate limiting and caching)
@@ -123,11 +125,19 @@ func main() {
 		Handler: adminApiRouter,
 	}
 
-	// Initialize config file watcher
-	// Do this on gateway startup, load the config from config
-	if err := gateway.LoadProxyConfigFromConfigFile(container.Global.AppConfig.ConfigFilePath); err != nil {
-		slog.Error("Failed to load initial config file", "error", err)
-		os.Exit(1)
+	// Initialize configuration based on mode
+	if container.Global.AppConfig.Mode == container.ModeDB {
+		slog.Info("Loading initial configuration from SQL store...")
+		if err := gateway.ReloadConfigFromStore(); err != nil {
+			slog.Error("Failed to load initial config from SQL store", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		slog.Info("Loading initial configuration from declarative file...", "path", container.Global.AppConfig.ConfigFilePath)
+		if err := gateway.LoadProxyConfigFromConfigFile(container.Global.AppConfig.ConfigFilePath); err != nil {
+			slog.Error("Failed to load initial config file", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	// Initialize OpenTelemetry if enabled
@@ -143,10 +153,12 @@ func main() {
 		}()
 	}
 
-	// Start the file watcher
-	errGroup.Go(func() error {
-		return gateway.WatchConfigFile(errGrpCtx, container.Global.AppConfig.ConfigFilePath)
-	})
+	// Start the file watcher ONLY in DB-less mode
+	if container.Global.AppConfig.Mode == container.ModeDBLess {
+		errGroup.Go(func() error {
+			return gateway.WatchConfigFile(errGrpCtx, container.Global.AppConfig.ConfigFilePath)
+		})
+	}
 
 	// Start health checker, we start the health checker before the servers start, so that we can verify the health of the services before they are proxied.
 	// We also add it to the error group, so that it can be stopped gracefully when the gateway is shutdown.

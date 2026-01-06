@@ -53,32 +53,35 @@ func (plugin ResponseHandlerPlugin) Execute(next http.Handler) http.Handler {
 		*r = *r.WithContext(ctx)
 
 		// Record Prometheus Metrics
-		// Try getting from context first (Optimized path)
+		// Get from context (Optimized path)
 		var service *model.Service
 		var route *model.Route
 		var serviceName, routeName string
 
-		if s, ok := ctx.Value(constant.CONTEXT_MATCHED_SERVICE).(*model.Service); ok {
-			service = s
-			serviceName = service.Name
-		}
-		if rt, ok := ctx.Value(constant.CONTEXT_MATCHED_ROUTE).(*model.Route); ok {
-			route = rt
-			routeName = route.Name
-		}
+		serviceVal := ctx.Value(constant.CONTEXT_MATCHED_SERVICE)
+		routeVal := ctx.Value(constant.CONTEXT_MATCHED_ROUTE)
 
-		// Fallback to legacy lookup if context missing
-		if service == nil || route == nil {
+		if serviceVal == nil || routeVal == nil {
+			// Fallback to legacy lookup ONLY if context missing (e.g. in tests)
 			s, rt, err := util.GetServiceAndRouteFromRequest(GetGlobalProxyConfig(), r)
 			if err == nil {
-				service = s
-				route = rt
-				serviceName = service.Name
-				routeName = route.Name
-			} else {
-				serviceName = "unknown"
-				routeName = "unknown"
+				serviceVal = s
+				routeVal = rt
 			}
+		}
+
+		if s, ok := serviceVal.(*model.Service); ok {
+			service = s
+			serviceName = service.Name
+		} else {
+			serviceName = "unknown"
+		}
+
+		if rt, ok := routeVal.(*model.Route); ok {
+			route = rt
+			routeName = route.Name
+		} else {
+			routeName = "unknown"
 		}
 
 		startTime, ok := ctx.Value(constant.CONTEXT_START_TIME).(time.Time)

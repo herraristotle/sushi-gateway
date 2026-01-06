@@ -7,78 +7,168 @@ name: sushi-gateway
 # SERVICES - Backend services that Sushi Gateway proxies to
 # =============================================================================
 services:
-  - name: sushi-svc
-    base_path: /sushi-service
+  # Control Plane - Function management, API keys, deployments
+  - name: controlplane
+    url: http://controlplane-upstream
     protocol: http
-    host: controlplane-upstream # Reference to upstream defined below
-
-    health:
-      enabled: true
-      path: /health
-    routes:
-      - name: get-sushi
-        path: /v1/sushi
-
-      - name: get-sushi-by-id
-        path: /v1/sushi/{id}
-
-      - name: get-sushi-restaurants
-        path: /v1/sushi/restaurant
-
-  - name: secure-payment-service
-    base_path: /payments
-    protocol: https
-    host: dataplane-upstream
-
-    retries: 3
     connect_timeout: 5000
-    read_timeout: 30000
-    write_timeout: 30000
-    tls:
-      enabled: true
-      ca_cert_path: /etc/certs/ca.crt
-      cert_path: /etc/certs/client.crt
-      key_path: /etc/certs/client.key
-    health:
-      enabled: true
-      path: /health
+    read_timeout: 60000
+    write_timeout: 60000
+    retries: 3
     routes:
-      - name: process-payment
-        path: /v1/process
-        methods: [POST]
-        headers:
-          "X-Canary": "true"
+      - name: controlplane-functions
+        paths:
+          - /functions
+          - /api-keys
+          - /deployments
+          - /billing
+          - /layers
+          - /rbac
+        strip_path: false
+        preserve_host: true
 
-  - name: dashboard
-    base_path: /dashboard
+  # Data Plane - Function invocation and worker management
+  - name: dataplane
+    url: http://dataplane-upstream
     protocol: http
+    connect_timeout: 5000
+    read_timeout: 300000  # 5 min for long-running functions
+    write_timeout: 300000
+    retries: 1  # Don't retry invocations (idempotency handled internally)
     routes:
-      - name: user-dashboard
-        path: /v1/user/{id}
-        backends:
-          - name: user
-            target: user-service:3000
-            path: /users/{id}
-            protocol: http
-            timeout_ms: 5000
-            required: true
-          - name: orders
-            target: order-service:3000
-            path: /orders?user_id={id}
-            protocol: http
-            timeout_ms: 3000
-            required: false
-          - name: notifications
-            target: notification-service:3000
-            path: /notifications/{id}
-            protocol: http
-            timeout_ms: 2000
-            required: false
+      - name: dataplane-invocations
+        paths:
+          - /invocations
+          - /invoke
+        strip_path: false
+        preserve_host: true
+      - name: dataplane-workers
+        paths:
+          - /register
+          - /workers
+        strip_path: false
+        preserve_host: true
+
+  # Queue Service - Message queues
+  - name: queue
+    url: http://queue-upstream
+    protocol: http
+    connect_timeout: 5000
+    read_timeout: 60000
+    write_timeout: 60000
+    retries: 3
+    routes:
+      - name: queue-routes
+        paths:
+          - /queues
+        strip_path: false
+        preserve_host: true
+
 
 # =============================================================================
-# PLUGINS - Centralized plugin configurations
+# CONSUMERS - API consumers (for key-auth and JWT)
+# =============================================================================
+consumers:
+  # Supabase JWT Consumer - validates JWTs issued by Supabase
+  # The JWT plugin will match tokens based on the 'iss' claim
+  - username: supabase
+    jwt_secrets:
+      # HS256 - Supabase default
+      # 'key' = the 'iss' claim in the JWT (issuer URL)
+      # 'secret' = Supabase project JWT secret
+      - algorithm: HS256
+        key: "https://tsqoipgfjxscwnjqxyfj.supabase.co/auth/v1"
+        secret: "mAHNt5/rhlD6yMPzIxCNS5Yrw5+qtkGWhNDgLhkTxhcxjWGXWS24SnDYiqoDrg20d5KddjM8IOKTjXtnxcsnVQ=="
+
+  # System consumer for internal API key access
+  - username: system
+    keyauth_credentials:
+      - key: "effe-system-key-2024"
+
+
+# =============================================================================
+# PLUGINS - Global plugins applied to all routes
 # =============================================================================
 plugins:
+  # CORS - Allow cross-origin requests from frontend
+  - name: cors
+    config:
+      origins:
+        - "*"  # Allow all origins for development (restrict in production)
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - X-Auth-Token
+        - Authorization
+        - X-API-Key
+        - X-Function-Name
+        - X-Async
+      exposed_headers:
+        - X-Auth-Token
+        - X-Request-Id
+      credentials: true
+      max_age: 3600
+      preflight_continue: false
+
+  # JWT Validation (Supabase)
+  - name: jwt
+    config:
+      claims_to_verify:
+        - exp
+      header_names:
+        - Authorization
+      key_claim_name: iss
+      secret_is_base64: false
+      run_on_preflight: true
+
+  # API Key Authentication (fallback if no JWT)
+  - name: key-auth
+    config:
+      key_names:
+        - X-API-Key
+        - apikey
+      hide_credentials: true
+      key_in_header: true
+      key_in_query: false
+      key_in_body: false
+      run_on_preflight: false
+
+  # Request Transformer - Inject consumer identity headers for the backend (Zero Trust)
+  # After Kong validates JWT/API Key, it injects these headers:
+  #   X-Consumer-ID: Kong consumer ID
+  #   X-Consumer-Username: Consumer username (e.g., "supabase" or "system")
+  #   X-Authenticated-Userid: The authenticated user's ID from JWT 'sub' claim
+  #   X-Gateway-Secret: Shared secret to prove request came from Kong
+  # The backend trusts these headers without re-validating the token.
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Kong-Consumer-ID:$(headers['x-consumer-id'] or '')"
+          - "X-Kong-Consumer-Username:$(headers['x-consumer-username'] or '')"
+          - "X-Kong-Authenticated-Userid:$(headers['x-authenticated-userid'] or '')"
+          - "X-Gateway-Secret:effe-system-key-2024"
+
+  # Rate Limiting
+  - name: rate-limiting
+    config:
+      minute: 100
+      hour: 5000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+
   # OpenTelemetry (disabled - enable when OTEL endpoint is configured)
   # - name: opentelemetry
   #   config:
@@ -115,17 +205,7 @@ plugins:
       fault_tolerant: true
       hide_client_headers: false
 
-  - name: sanitization
-    route: process-payment
-    config: {}
-
-  - name: cache
-    route: user-dashboard
-    config:
-      ttl: 60.0
-      cache_control: true
-
-# Optional
+# Optional for scalling
 # =============================================================================
 # UPSTREAMS - Load balancer groups
 # =============================================================================
@@ -141,8 +221,6 @@ upstreams:
           interval: 5
           http_failures: 3
         http_path: /health
-        timeout: 1
-        concurrency: 10
         type: http
     targets:
       - target: localhost:3001
@@ -159,8 +237,6 @@ upstreams:
           interval: 5
           http_failures: 3
         http_path: /health
-        timeout: 1
-        concurrency: 10
         type: http
     targets:
       - target: localhost:8082
@@ -177,8 +253,6 @@ upstreams:
           interval: 5
           http_failures: 3
         http_path: /health
-        timeout: 1
-        concurrency: 10
         type: http
     targets:
       - target: localhost:9090

@@ -66,8 +66,8 @@ func (pv *PluginValidator) createPluginFromConfig(plugin model.PluginConfig) *Pl
 		return NewCircuitBreakerPlugin(plugin.Config)
 	case constant.PLUGIN_RBAC:
 		return NewRBACPlugin(plugin.Config)
-	case constant.PLUGIN_SANITIZATION:
-		return NewSanitizationPlugin(plugin.Config)
+	case constant.PLUGIN_WAF, constant.PLUGIN_SANITIZATION:
+		return NewWAFPlugin(plugin.Config)
 	case constant.PLUGIN_CACHE:
 		return NewCachePlugin(plugin.Config)
 	case constant.PLUGIN_SHADOW_TRAFFIC:

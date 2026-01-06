@@ -105,6 +105,17 @@ func LoadGlobalConfig() (*container.AppConfig, error) {
 		}
 	}
 
+	// Gateway Mode (db or dbless)
+	sushiMode := os.Getenv("SUSHI_MODE")
+	if sushiMode == "" {
+		sushiMode = container.ModeDBLess
+		slog.Info("SUSHI_MODE not set, defaulting to dbless mode")
+	} else if sushiMode != container.ModeDB && sushiMode != container.ModeDBLess {
+		errors = append(errors, fmt.Sprintf("Invalid SUSHI_MODE: %s. Must be 'db' or 'dbless'", sushiMode))
+	} else {
+		slog.Info("Running in explicit mode", "mode", sushiMode)
+	}
+
 	if len(errors) > 0 {
 		for _, err := range errors {
 			slog.Error(err)
@@ -126,6 +137,7 @@ func LoadGlobalConfig() (*container.AppConfig, error) {
 		RedisPassword:   redisPassword,
 		RedisDB:         redisDB,
 		DbPath:          dbPath,
+		Mode:            sushiMode,
 	}
 
 	// Initialize the DI container

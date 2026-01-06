@@ -138,12 +138,24 @@ func (plugin RateLimitPlugin) Execute(next http.Handler) http.Handler {
 
 		ctx := r.Context()
 
-		service, route, err := util.GetServiceAndRouteFromRequest(plugin.proxyConfig, r)
-		if err != nil {
-			err.WriteLogMessage()
-			err.WriteJSONResponse(w)
-			return
+		// Get service and route from context (already matched by SushiProxy)
+		serviceVal := ctx.Value(constant.CONTEXT_MATCHED_SERVICE)
+		routeVal := ctx.Value(constant.CONTEXT_MATCHED_ROUTE)
+
+		if serviceVal == nil || routeVal == nil {
+			// Fallback to legacy lookup if context not set (e.g. in tests)
+			service, route, err := util.GetServiceAndRouteFromRequest(plugin.proxyConfig, r)
+			if err != nil {
+				err.WriteLogMessage()
+				err.WriteJSONResponse(w)
+				return
+			}
+			serviceVal = service
+			routeVal = route
 		}
+
+		service := serviceVal.(*model.Service)
+		route := routeVal.(*model.Route)
 
 		rateLimitOperationLevel := plugin.detectRateLimitOperationLevel(service, route)
 		clientIp, err := util.GetHostIp(r.RemoteAddr)

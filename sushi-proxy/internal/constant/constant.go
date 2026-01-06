@@ -31,12 +31,14 @@ var AVAILABLE_PLUGINS = []string{
 	PLUGIN_HEADER_TRANSFORMATION,
 	PLUGIN_CIRCUIT_BREAKER,
 	PLUGIN_RBAC,
-	PLUGIN_SANITIZATION,
 	PLUGIN_CACHE,
 	PLUGIN_SHADOW_TRAFFIC,
 	PLUGIN_MULTI_AUTH,
 	PLUGIN_PROMETHEUS,
 	PLUGIN_OPENTELEMETRY,
+	PLUGIN_WAF,
+	PLUGIN_SANITIZATION,
+	PLUGIN_REQUEST_TRANSFORMER,
 }
 
 const PLUGIN_RESPONSE_HANDLER = "response-handler"
@@ -51,6 +53,7 @@ const PLUGIN_KEY_AUTH = "key-auth"
 const PLUGIN_MTLS = "mtls"
 const PLUGIN_HTTP_LOG = "http-log"
 const PLUGIN_HEADER_TRANSFORMATION = "header-transformation"
+const PLUGIN_REQUEST_TRANSFORMER = "request-transformer"
 const PLUGIN_CIRCUIT_BREAKER = "circuit-breaker"
 const PLUGIN_RBAC = "rbac"
 const PLUGIN_SANITIZATION = "sanitization"
@@ -60,3 +63,4 @@ const PLUGIN_MULTI_AUTH = "multi-auth"
 const PLUGIN_PROMETHEUS = "prometheus"
 const PLUGIN_OPENTELEMETRY = "opentelemetry"
 const PLUGIN_REQUEST_TERMINATION = "request-termination"
+const PLUGIN_WAF = "waf"

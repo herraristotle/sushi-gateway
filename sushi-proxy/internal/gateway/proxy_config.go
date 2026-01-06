@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"os"
 	"sync/atomic"
+	"time"
+
+	"net/url"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
@@ -24,6 +27,13 @@ func GetGlobalProxyConfig() *model.ProxyConfig {
 }
 
 func LoadProxyConfigFromConfigFile(filePath string) error {
+	start := time.Now()
+	err := loadProxyConfigBody(filePath)
+	RecordConfigReload(err == nil, time.Since(start).Seconds())
+	return err
+}
+
+func loadProxyConfigBody(filePath string) error {
 	slog.Info("Loading proxy_pass gateway from config file.", "path", filePath)
 	configFile, err := os.ReadFile(filePath)
 	if err != nil {
@@ -59,18 +69,6 @@ func LoadProxyConfigFromConfigFile(filePath string) error {
 		return err
 	}
 
-	// If we have a SQL store, and it's empty, we might want to populate it from the file
-	if GlobalConfigStore != nil {
-		ctx := context.Background()
-		existing, _ := GlobalConfigStore.ListServices(ctx)
-		if len(existing) == 0 {
-			slog.Info("SQL Store is empty, populating from config file...")
-			if err := GlobalConfigStore.SaveProxyConfig(ctx, config); err != nil {
-				slog.Error("Failed to sync config file to SQL store", "error", err)
-			}
-		}
-	}
-
 	slog.Info("Config file loaded successfully")
 	// Validations passed
 	globalProxyConfig.Store(config)
@@ -98,6 +96,13 @@ func InitSQLStore(dbPath string) error {
 
 // ReloadConfigFromStore fetches config from the database and updates the gateway state
 func ReloadConfigFromStore() error {
+	start := time.Now()
+	err := reloadConfigFromStoreBody()
+	RecordConfigReload(err == nil, time.Since(start).Seconds())
+	return err
+}
+
+func reloadConfigFromStoreBody() error {
 	if GlobalConfigStore == nil {
 		return fmt.Errorf("ConfigStore not initialized")
 	}
@@ -239,6 +244,15 @@ func distributePlugins(config *model.ProxyConfig) error {
 func linkUpstreams(config *model.ProxyConfig) error {
 	for i := range config.Services {
 		svc := &config.Services[i]
+
+		// If Service has a URL but no Host, parse Host from URL
+		// This supports Kong-style "url: http://upstream-name" config
+		if svc.Host == "" && svc.URL != "" {
+			u, err := url.Parse(svc.URL)
+			if err == nil {
+				svc.Host = u.Hostname()
+			}
+		}
 
 		// If Service has a Host defined, check if it matches a global Upstream name
 		if svc.Host != "" {

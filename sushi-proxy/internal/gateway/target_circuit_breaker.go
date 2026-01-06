@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rawsashimi1604/sushi-gateway/sushi-proxy/internal/model"
 	"github.com/sony/gobreaker"
 )
 
@@ -18,43 +19,71 @@ var (
 	GlobalTargetCBManager = &TargetCBManager{}
 )
 
-// GetBreaker retrieves or creates a CB for the given target address
-func (m *TargetCBManager) GetBreaker(targetAddr string) *gobreaker.CircuitBreaker {
-	if cb, ok := m.breakers.Load(targetAddr); ok {
+// GetBreaker retrieves or creates a CB for the given target address, utilizing service configuration
+func (m *TargetCBManager) GetBreaker(targetAddr string, service *model.Service, upstreamId string) *gobreaker.CircuitBreaker {
+	// Key remains targetAddr for pool sharing, but we could use service+upstream if isolation is preferred.
+	// Kong's circuit breaker is usually per-upstream.
+	key := fmt.Sprintf("%s_%s_%s", service.Name, upstreamId, targetAddr)
+
+	if cb, ok := m.breakers.Load(key); ok {
 		return cb.(*gobreaker.CircuitBreaker)
 	}
 
 	// Default settings
-	// TODO: Make configurable via ProxyConfig if desired
+	maxRequests := uint32(5)
+	interval := 60 * time.Second
+	timeout := 10 * time.Second
+	failureThreshold := 10
+	failureRate := 0.5
+
+	// Map Passive Health Check configuration if available
+	if service != nil && service.UpstreamHealthChecks != nil && service.UpstreamHealthChecks.Passive != nil {
+		passive := service.UpstreamHealthChecks.Passive
+		if passive.Unhealthy != nil && passive.Unhealthy.HttpFailures > 0 {
+			failureThreshold = passive.Unhealthy.HttpFailures
+		}
+		// In gobreaker, ReadyToTrip is the trigger. We can use failureThreshold as a simple count.
+	}
+
 	settings := gobreaker.Settings{
-		Name:        targetAddr,
-		MaxRequests: 5,                // Allow 5 concurrent requests in half-open state
-		Interval:    60 * time.Second, // Interval to cycle counts
-		Timeout:     10 * time.Second, // Duration of open state
+		Name:        key,
+		MaxRequests: maxRequests,
+		Interval:    interval,
+		Timeout:     timeout,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			// Trip if > 10 requests and > 50% failure rate
-			return counts.Requests >= 10 && float64(counts.TotalFailures)/float64(counts.Requests) >= 0.5
+			// Trip if > threshold failures
+			return counts.ConsecutiveFailures >= uint32(failureThreshold) ||
+				(counts.Requests >= 10 && float64(counts.TotalFailures)/float64(counts.Requests) >= failureRate)
+		},
+		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+			if to == gobreaker.StateOpen {
+				GlobalHealthChecker.UpdateHealthStatus(service.Name, upstreamId, Unhealthy)
+			} else if to == gobreaker.StateClosed {
+				GlobalHealthChecker.UpdateHealthStatus(service.Name, upstreamId, Healthy)
+			}
 		},
 	}
 
 	cb := gobreaker.NewCircuitBreaker(settings)
-	actual, _ := m.breakers.LoadOrStore(targetAddr, cb)
+	actual, _ := m.breakers.LoadOrStore(key, cb)
 	return actual.(*gobreaker.CircuitBreaker)
 }
 
 // Allow checks if the target is available (Circuit Breaker is not Open)
-func (m *TargetCBManager) Allow(targetAddr string) bool {
-	return m.GetBreaker(targetAddr).State() != gobreaker.StateOpen
+func (m *TargetCBManager) Allow(targetAddr string, service *model.Service, upstreamId string) bool {
+	return m.GetBreaker(targetAddr, service, upstreamId).State() != gobreaker.StateOpen
 }
 
 // CircuitBreakerTransport wraps http.RoundTripper with target-specific circuit breaking
 type CircuitBreakerTransport struct {
-	Target string
-	Base   http.RoundTripper
+	Target     string
+	Service    *model.Service
+	UpstreamID string
+	Base       http.RoundTripper
 }
 
 func (t *CircuitBreakerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	cb := GlobalTargetCBManager.GetBreaker(t.Target)
+	cb := GlobalTargetCBManager.GetBreaker(t.Target, t.Service, t.UpstreamID)
 
 	var resp *http.Response
 

@@ -39,40 +39,39 @@ func NewJwtPlugin(config map[string]interface{}) *Plugin {
 }
 
 func (plugin JwtPlugin) Validate() error {
-	alg, ok := plugin.config["alg"].(string)
-	if !ok || alg == "" {
-		return fmt.Errorf("alg must be a non-empty string")
-	}
+	// Relaxed validation: Most settings are optional when using Consumer auth
+	// Only validate alg if provided
+	if alg, ok := plugin.config["alg"].(string); ok && alg != "" {
+		supportedJwtSigningMethods := []string{constant.HS_256, constant.RSA_256}
+		if !util.SliceContainsString(supportedJwtSigningMethods, alg) {
+			return fmt.Errorf("alg must be one of: HS256, RS256")
+		}
 
-	// Only HS256 and RS256 is supported for now
-	supportedJwtSigningMethods := []string{constant.HS_256, constant.RSA_256}
-	if !util.SliceContainsString(supportedJwtSigningMethods, alg) {
-		return fmt.Errorf("alg must be one of: HS256, RS256")
-	}
+		// If alg is HS256, verification secret is required
+		if alg == constant.HS_256 {
+			secret, ok := plugin.config["secret"].(string)
+			if !ok || secret == "" {
+				return fmt.Errorf("secret must be a non-empty string when alg is HS256")
+			}
+		}
 
-	iss, ok := plugin.config["iss"].(string)
-	if !ok || iss == "" {
-		return fmt.Errorf("iss (issuer) must be a non-empty string")
-	}
-
-	if alg == constant.HS_256 {
-		secret, ok := plugin.config["secret"].(string)
-		if !ok || secret == "" {
-			return fmt.Errorf("secret must be a non-empty string")
+		// If alg is RS256, public key is required
+		if alg == constant.RSA_256 {
+			publicKey, ok := plugin.config["publicKey"].(string)
+			if !ok || publicKey == "" {
+				return fmt.Errorf("publicKey must be a non-empty string when alg is RS256")
+			}
+			// Validate the RSA public key format and structure
+			_, err := jwt.ParseRSAPublicKeyFromPEM([]byte(publicKey))
+			if err != nil {
+				return fmt.Errorf("invalid RSA public key: %v", err)
+			}
 		}
 	}
 
-	if alg == constant.RSA_256 {
-		publicKey, ok := plugin.config["publicKey"].(string)
-		if !ok || publicKey == "" {
-			return fmt.Errorf("publicKey must be a non-empty string")
-		}
-
-		// Validate the RSA public key format and structure
-		_, err := jwt.ParseRSAPublicKeyFromPEM([]byte(publicKey))
-		if err != nil {
-			return fmt.Errorf("invalid RSA public key: %v", err)
-		}
+	// iss is optional (defaults to verifying from consumers matching iss claim)
+	if iss, ok := plugin.config["iss"].(string); ok && iss == "" {
+		// If explicitly provided as empty string, that's fine, but usually implies intent
 	}
 
 	return nil
