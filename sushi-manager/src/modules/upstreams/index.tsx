@@ -4,6 +4,7 @@ import DashboardCard from "../../components/layout/DashboardCard";
 import Header from "../../components/typography/Header";
 import Subtitle from "../../components/typography/Subtitle";
 import UpstreamTable from "./UpstreamTable";
+import AdminApiService from "../../api/services/admin/AdminApiService";
 
 interface UpstreamData {
     upstream_id: string;
@@ -28,8 +29,8 @@ function UpstreamsModule() {
 
     async function fetchUpstreams() {
         try {
-            const response = await fetch("http://localhost:8001/api/stats");
-            const data = await response.json();
+            const response = await AdminApiService.getStats();
+            const data = response.data;
             setUpstreams(data.upstreams || []);
         } catch (error) {
             console.error("Failed to fetch upstreams:", error);

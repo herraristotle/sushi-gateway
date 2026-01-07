@@ -1,24 +1,80 @@
-# Admin API Reference
+# Admin REST API Reference
 
-The Sushi Gateway Admin API provides endpoints for monitoring and managing the gateway. All endpoints are available at `http://localhost:8001/api` by default.
+The Sushi Gateway Admin API provides a comprehensive interface for managing and monitoring the gateway. It allows administrators to retrieve gateway state, manage services/routes/upstreams (in DB mode), and view performance metrics. All endpoints are available at `http://localhost:8081` by default.
 
-## Authentication
+## Access & Authentication
 
-Currently, the Admin API does not require authentication. In production, ensure this port is properly secured.
+The Admin API is hosted on **port 8081** (default). 
 
-## Health Status
+### Base URL
+```
+http://<gateway-host>:8081
+```
 
-### GET /api/health
+### Authentication (JWT + Basic Auth)
 
-Returns health status for all upstreams across all services.
+1. **Login**: Authenticate via `POST /login` using **Basic Auth** (`Authorization: Basic ...`).
+2. **Session**: Upon success, the API returns a `Set-Cookie: token=<jwt>` header.
+3. **Subsequent Requests**: Browsers/Clients must include this `HttpOnly` cookie.
 
-**Response:**
+::: tip
+In **DB-less mode**, the Admin API is **read-only** (except for `/config` reload). All POST/PUT/DELETE operations on entities will return `405 Method Not Allowed`.
+:::
+
+---
+
+## Core Endpoints
+
+### Gateway State
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/gateway` | Returns the complete runtime configuration (ProxyConfig) |
+| `GET` | `/gateway/config` | Returns the environment/boot configuration (AppConfig) |
+| `POST` | `/config` | Force a configuration reload from the source |
+
+### Observability
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Current health status of all upstreams |
+| `GET` | `/api/stats` | Real-time performance metrics and load balancing stats |
+| `GET` | `/metrics` | Prometheus-format metrics for scraping |
+
+---
+
+## Entity Management (DB Mode Only)
+
+### Services
+Manage the backend services known to the gateway.
+
+- `GET /services`: List all services
+- `POST /services`: Create or update a service (Body: `Service` object)
+- `DELETE /services/{name}`: Delete a service by name
+
+### Routes
+Manage routing rules for a specific service.
+
+- `GET /services/{serviceName}/routes`: List routes for a service
+- `POST /services/{serviceName}/routes`: Create/update a route
+- `DELETE /services/{serviceName}/routes/{routeName}`: Delete a route
+
+### Upstreams
+Manage target upstream servers globally.
+
+- `GET /upstreams`: List all upstream targets
+- `POST /upstreams`: Create/update an upstream
+- `DELETE /upstreams/{name}`: Delete an upstream
+
+---
+
+## Detailed Resource Formats
+
+### Health Response (`GET /api/health`)
 ```json
 [
   {
-    "upstream_id": "uuid-string",
+    "upstream_id": "api-v1-target-1",
     "service_name": "api-service",
-    "target": "localhost:8080",
+    "target": "10.0.0.5:8080",
     "status": "healthy",
     "check_type": "active",
     "last_checked": "2026-01-06T05:30:00Z",
@@ -28,157 +84,44 @@ Returns health status for all upstreams across all services.
 ]
 ```
 
-**Fields:**
-- `upstream_id` (string): Unique identifier for the upstream
-- `service_name` (string): Name of the service this upstream belongs to
-- `target` (string): Host:port of the upstream server
-- `status` (string): Health status - `healthy`, `unhealthy`, or `not_available`
-- `check_type` (string): Type of health check - `active`, `passive`, `both`, or `unknown`
-- `last_checked` (string): ISO 8601 timestamp of last health check
-- `successes` (number): Consecutive successful health checks
-- `failures` (number): Consecutive failed health checks
+### Health Response Details
 
----
+| Field | Description |
+|-------|-------------|
+| `upstream_id` | Unique identifier for the upstream |
+| `service_name` | Name of the service this upstream belongs to |
+| `target` | Host:port of the upstream server |
+| `status` | Health status - `healthy`, `unhealthy`, or `unknown` |
+| `check_type` | Type of health check - `active`, `passive`, or `both` |
+| `successes` | Consecutive successful health checks |
+| `failures` | Consecutive failed health checks |
+| `last_checked` | ISO 8601 timestamp of last health check |
 
-## Load Balancing Stats
-
-### GET /api/stats
-
-Returns comprehensive load balancing statistics including upstream metrics and rate limiting data.
-
-**Response:**
+### Stats Response (`GET /api/stats`)
 ```json
 {
   "upstreams": [
     {
-      "upstream_id": "uuid-string",
-      "service_name": "api-service",
-      "target": "localhost:8080",
-      "weight": 100,
-      "active_connections": 5,
-      "ewma_latency_ms": 12.45,
+      "upstream_id": "api-v1",
+      "active_connections": 12,
+      "ewma_latency_ms": 45.2,
       "health_status": "healthy"
     }
   ],
   "rate_limits": [
     {
-      "scope": "global",
-      "hits": 42,
-      "allowed": 9958,
-      "hit_rate": 0.42
+      "scope": "service:api-service",
+      "hits": 1500,
+      "allowed": 8500
     }
   ]
 }
 ```
 
-**Upstream Fields:**
-- `upstream_id` (string): Unique identifier
-- `service_name` (string): Parent service name
-- `target` (string): Upstream host:port
-- `weight` (number): Load balancing weight (1-1000)
-- `active_connections` (number): Current active connections to this upstream
-- `ewma_latency_ms` (number): Exponentially weighted moving average latency in milliseconds
-- `health_status` (string): Current health status
-
-**Rate Limit Fields:**
-- `scope` (string): Rate limit scope (e.g., `global`, `service:name`)
-- `hits` (number): Total requests that hit the rate limit
-- `allowed` (number): Total requests allowed through
-- `hit_rate` (number): Percentage of requests that were rate limited
-
 ---
 
-## Gateway Configuration
+## Related Documentation
 
-### GET /api/gateway
-
-Returns the complete gateway configuration including services, routes, plugins, and upstreams.
-
-**Response:**
-```json
-{
-  "gateway": {
-    "name": "sushi-gateway",
-    "global": { /* global config */ },
-    "services": [
-      {
-        "name": "api-service",
-        "base_path": "/api",
-        "protocol": "http",
-        "load_balancing_strategy": "round-robin",
-        "upstreams": [
-          {
-            "id": "uuid",
-            "target": "localhost:8080",
-            "weight": 100
-          }
-        ],
-        "routes": [ /* routes */ ],
-        "plugins": [ /* plugins */ ]
-      }
-    ]
-  },
-  "config": {
-    "port": 8000,
-    "admin_port": 8001
-  }
-}
-```
-
----
-
-## Prometheus Metrics
-
-### GET /metrics
-
-Prometheus-compatible metrics endpoint for monitoring and alerting.
-
-**Metrics Available:**
-- `sushi_gateway_requests_total` - Total HTTP requests
-- `sushi_gateway_request_duration_seconds` - Request latency histogram
-- `sushi_gateway_rate_limit_hits_total` - Rate limit hits counter
-- `sushi_gateway_upstream_requests_total` - Upstream request counter
-- And more...
-
-See the [Monitoring Guide](../concepts/monitoring.md) for complete metric documentation.
-
----
-
-## Auto-Refresh Recommendations
-
-For UI applications consuming these APIs:
-
-| Endpoint | Recommended Refresh | Use Case |
-|----------|---------------------|----------|
-| `/api/health` | 5 seconds | Real-time health monitoring |
-| `/api/stats` | 10 seconds | Load balancing metrics |
-| `/api/gateway` | 30 seconds | Configuration changes |
-| `/metrics` | 15-30 seconds | Prometheus scraping |
-
----
-
-## Error Responses
-
-All endpoints return standard HTTP status codes:
-
-- `200 OK` - Success
-- `500 Internal Server Error` - Gateway configuration not loaded or internal error
-
-**Error Response Format:**
-```json
-{
-  "error": "Gateway config not loaded"
-}
-```
-
----
-
-## CORS Configuration
-
-The Admin API supports CORS for frontend access. Configure via:
-
-```yaml
-admin_cors_origin: "http://localhost:5173"
-```
-
-Default origin is `http://localhost:5173` for local development.
+- [Monitoring Guide](../operations/monitoring.md)
+- [Prometheus Plugin](../plugins/prometheus.md)
+- [OpenTelemetry Tracing](../plugins/opentelemetry.md)

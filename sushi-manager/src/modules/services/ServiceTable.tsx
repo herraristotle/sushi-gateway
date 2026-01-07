@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { IoMdInformationCircle } from "react-icons/io";
 import ServiceModal from "./ServiceModal";
+import AdminApiService from "../../api/services/admin/AdminApiService";
 
 interface ServiceTableProps {
   services: any;
@@ -22,8 +23,8 @@ function ServiceTable({ services }: ServiceTableProps) {
 
   async function fetchUpstreamStats() {
     try {
-      const response = await fetch("http://localhost:8001/api/stats");
-      const data = await response.json();
+      const response = await AdminApiService.getStats();
+      const data = response.data;
 
       // Aggregate stats per service
       const stats = new Map<string, UpstreamStats>();

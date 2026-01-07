@@ -163,7 +163,7 @@ docker run \
 -e CONFIG_FILE_PATH="/app/config.json" \
 -e ADMIN_USER=admin \
 -e ADMIN_PASSWORD=changeme \
--p 8008:8008 \
+-p 8080:8080 \
 -p 8081:8081 \
 -p 8443:8443 \
 rawsashimi/sushi-proxy:0.4.1
@@ -174,7 +174,7 @@ rawsashimi/sushi-proxy:0.4.1
 Verify that the proxy works:
 
 ```bash
-curl http://localhost:8008/example/v1/sushi | jq
+curl http://localhost:8080/example/v1/sushi | jq
 ```
 
 Expected response:

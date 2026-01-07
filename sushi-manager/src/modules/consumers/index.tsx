@@ -4,6 +4,7 @@ import DashboardCard from "../../components/layout/DashboardCard";
 import Header from "../../components/typography/Header";
 import Subtitle from "../../components/typography/Subtitle";
 import ConsumerTable from "./ConsumerTable";
+import AdminApiService from "../../api/services/admin/AdminApiService";
 
 interface Consumer {
     id: string;
@@ -22,10 +23,8 @@ function ConsumersModule() {
 
     async function fetchConsumers() {
         try {
-            // For now, consumers would come from gateway API
-            // This is a placeholder - you'd need to add /api/consumers endpoint
-            const response = await fetch("http://localhost:8001/api/gateway");
-            const data = await response.json();
+            const response = await AdminApiService.getGatewayData();
+            const data = response.data;
 
             // Extract consumers if they exist in the config
             const consumersData = data?.gateway?.consumers || [];

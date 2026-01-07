@@ -1,117 +1,133 @@
 # Bot Protection Plugin
 
-The Bot Protection (`bot_protection`) plugin helps safeguard your APIs by blocking requests based on User Agent strings in the HTTP headers. This plugin is ideal for filtering out traffic from known bots or restricting access to specific clients.
+Production-grade bot and crawler protection with **80+ known malicious bot patterns** and intelligent browser detection.
 
-## How It Works
+## Protection
 
-The Bot Protection plugin inspects the `User-Agent` header in incoming requests and applies one of two rules:
+- **Vulnerability Scanners**: SQLMap, Nikto, Burp Suite, Acunetix, etc.
+- **Scrapers**: Scrapy, Python requests, Puppeteer, Selenium
+- **Bad Bots**: SEO crawlers, backlink checkers, aggressive scrapers
+- **DDoS Tools**: Slowloris, Vegeta, k6, JMeter, Locust
 
-1. **Blacklist**: Blocks requests from User Agents listed in the `blacklist`.
-2. **Whitelist**: Allows only requests from User Agents listed in the `whitelist`.
+## Configuration
 
-::: warning
-You cannot configure both `blacklist` and `whitelist` at the same time. Choose one based on your requirements.
-:::
-
-Requests that do not meet the configured criteria are rejected with a **403 Forbidden** response.
-
-### Key Features
-
-- Simple filtering based on `User-Agent` strings.
-- Configurable as a blacklist or whitelist.
-
-::: tip
-Learn how to integrate this plugin into your setup in the **[Plugins Overview](../plugins/index.md)**.
-:::
-
-## Configuration Fields
-
-| Field       | Type  | Description                                                    | Example Value              |
-| ----------- | ----- | -------------------------------------------------------------- | -------------------------- |
-| `blacklist` | Array | List of User Agents to block. Cannot be used with `whitelist`. | `["googlebot", "bingbot"]` |
-| `whitelist` | Array | List of User Agents to allow. Cannot be used with `blacklist`. | `["custom-client"]`        |
-
-::: tip
-Use `blacklist` for blocking unwanted bots, and `whitelist` for restricting access to specific clients.
-:::
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | String | "block" | "block" (blacklist) or "allow" (whitelist only) |
+| `blacklist` | Array | [] | Additional patterns to block |
+| `whitelist` | Array | [] | Patterns to always allow |
+| `use_default_blacklist` | Boolean | true | Use built-in 80+ malicious bot list |
+| `allow_good_bots` | Boolean | true | Allow search engines & social bots |
+| `block_empty_ua` | Boolean | false | Block empty User-Agent |
+| `validate_browser_headers` | Boolean | false | Validate Accept/Accept-Language headers |
+| `block_message` | String | "Access denied" | Custom error message |
 
 ## Example Configuration
 
-### Blacklist Example
+### Production (Recommended)
+
+```yaml
+plugins:
+  - name: bot-protection
+    config:
+      use_default_blacklist: true
+      allow_good_bots: true
+```
+
+### High Security (API)
+
+```yaml
+plugins:
+  - name: bot-protection
+    config:
+      use_default_blacklist: true
+      block_empty_ua: true
+      validate_browser_headers: true
+```
+
+### Custom Blacklist
+
+```yaml
+plugins:
+  - name: bot-protection
+    config:
+      blacklist:
+        - "my-bad-bot"
+        - "custom-scraper"
+      whitelist:
+        - "my-monitoring-tool"
+```
+
+### Whitelist Mode (Strict)
+
+```yaml
+plugins:
+  - name: bot-protection
+    config:
+      mode: "allow"
+      whitelist:
+        - "googlebot"
+        - "bingbot"
+        - "my-api-client"
+```
+
+## Built-in Bot Lists
+
+### Blocked by Default (80+ patterns)
+
+| Category | Examples |
+|----------|----------|
+| Scanners | sqlmap, nikto, burpsuite, acunetix, nmap |
+| Scrapers | scrapy, python-requests, puppeteer, selenium |
+| Bad SEO | ahrefsbot, semrushbot, mj12bot, dotbot |
+| DDoS | slowloris, vegeta, k6, locust, jmeter |
+
+### Allowed Good Bots
+
+| Category | Examples |
+|----------|----------|
+| Search | googlebot, bingbot, duckduckbot, yandexbot |
+| Social | facebookexternalhit, twitterbot, linkedinbot |
+| Monitors | uptimerobot, pingdom, statuscake |
+
+## Response
 
 ```json
 {
-  "name": "bot_protection",
-  "enabled": true,
-  "config": {
-    "blacklist": ["googlebot", "bingbot", "yahoobot"]
-  }
+  "error": "BOT_DETECTED",
+  "message": "Access denied"
 }
 ```
 
-### Whitelist Example
+HTTP Status: `403 Forbidden`
 
-```json
-{
-  "name": "bot_protection",
-  "enabled": true,
-  "config": {
-    "whitelist": ["custom-client", "trusted-agent"]
-  }
-}
+## Logging
+
+```
+Bot protection: Request blocked
+  reason=blacklisted_bot
+  user_agent=sqlmap/1.5
+  client_ip=192.168.1.50
+  path=/api/users
 ```
 
-### Explanation
+## Use with WAF
 
-- **`blacklist`**: Blocks requests from the specified User Agents.
-- **`whitelist`**: Allows requests only from the specified User Agents.
+For maximum protection, combine with WAF:
 
-## Applying the Plugin
+```yaml
+plugins:
+  - name: waf
+    config:
+      paranoia_level: 1
 
-The Bot Protection plugin can be applied at various levels:
-
-1. **Global Level**: Filters all traffic at the gateway.
-2. **Service Level**: Applies filtering to specific services.
-3. **Route Level**: Restricts access to individual routes.
-
-Example of applying the plugin globally:
-
-```json
-{
-  "name": "bot_protection",
-  "enabled": true,
-  "config": {
-    "blacklist": ["googlebot", "bingbot"]
-  }
-}
+  - name: bot-protection
+    config:
+      use_default_blacklist: true
 ```
 
-::: tip
-Apply the plugin at the global level to protect all APIs from unwanted User Agents.
-:::
+## Related
 
-## Use Cases
-
-1. **Block Search Engine Crawlers**: Prevent bots like `googlebot` and `bingbot` from indexing sensitive APIs.
-2. **Restrict API Access**: Allow only trusted clients using the `whitelist` feature.
-3. **Enhance Security**: Reduce unwanted traffic and potential misuse by filtering suspicious User Agents.
-
-## Tips for Using the Bot Protection Plugin
-
-::: tip
-Regularly update the `blacklist` or `whitelist` based on observed traffic patterns and new threats.
-:::
-
-::: tip
-Combine with other plugins like Rate Limiting for layered protection.
-:::
-
-::: tip
-Monitor blocked requests using logs or analytics to fine-tune your configuration.
-:::
-
-::: warning
-This plugin provides basic filtering and may not prevent sophisticated attacks. Combine it with authentication and IP-based restrictions for robust security.
-:::
-
-For more plugins, visit the **[Plugins Overview](../plugins/index.md)**.
+- [WAF Plugin](./waf.md) - Attack detection
+- [Rate Limit Plugin](./rate-limit.md) - Brute force protection
+- [ACL Plugin](./acl.md) - IP-based access control

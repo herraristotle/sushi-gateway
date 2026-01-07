@@ -26,7 +26,8 @@ func NewAdminApiRouter() http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if container.Global != nil && container.Global.AppConfig != nil && container.Global.AppConfig.Mode == container.ModeDBLess {
 				// Allow GET requests and allow POST to /config (manual reload)
-				if r.Method != http.MethodGet && r.URL.Path != "/config" {
+				path := r.URL.Path
+				if r.Method != http.MethodGet && path != "/config" && path != "/api/config" && path != "/login" && path != "/api/login" && path != "/logout" && path != "/api/logout" {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					w.Write([]byte(`{"message": "Admin API is read-only in DB-less mode"}`))

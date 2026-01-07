@@ -189,18 +189,36 @@ func (plugin CorsPlugin) Execute(next http.Handler) http.Handler {
 }
 
 func (plugin CorsPlugin) parseCORSConfig() CORSConfig {
-
 	config := plugin.config
 
 	corsConfig := CORSConfig{
-		AllowOrigins:        util.ToStringSlice(config["allow_origins"].([]interface{})),
-		AllowMethods:        util.ToStringSlice(config["allow_methods"].([]interface{})),
-		AllowHeaders:        util.ToStringSlice(config["allow_headers"].([]interface{})),
-		ExposeHeaders:       util.ToStringSlice(config["expose_headers"].([]interface{})),
-		AllowCredentials:    config["allow_credentials"].(bool),
-		AllowPrivateNetwork: config["allow_private_network"].(bool),
-		PreflightContinue:   config["preflight_continue"].(bool),
-		MaxAge:              int64(config["max_age"].(float64)),
+		AllowOrigins: util.ToStringSlice(config["allow_origins"].([]interface{})),
+	}
+
+	if methods, ok := config["allow_methods"].([]interface{}); ok {
+		corsConfig.AllowMethods = util.ToStringSlice(methods)
+	}
+	if headers, ok := config["allow_headers"].([]interface{}); ok {
+		corsConfig.AllowHeaders = util.ToStringSlice(headers)
+	}
+	if exposed, ok := config["expose_headers"].([]interface{}); ok {
+		corsConfig.ExposeHeaders = util.ToStringSlice(exposed)
+	}
+
+	if val, ok := config["allow_credentials"].(bool); ok {
+		corsConfig.AllowCredentials = val
+	}
+	if val, ok := config["allow_private_network"].(bool); ok {
+		corsConfig.AllowPrivateNetwork = val
+	}
+	if val, ok := config["preflight_continue"].(bool); ok {
+		corsConfig.PreflightContinue = val
+	}
+
+	if val, ok := config["max_age"].(float64); ok {
+		corsConfig.MaxAge = int64(val)
+	} else if val, ok := config["max_age"].(int); ok {
+		corsConfig.MaxAge = int64(val)
 	}
 
 	return corsConfig

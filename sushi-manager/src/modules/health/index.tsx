@@ -4,6 +4,7 @@ import DashboardCard from "../../components/layout/DashboardCard";
 import Header from "../../components/typography/Header";
 import Subtitle from "../../components/typography/Subtitle";
 import HealthGrid from "./HealthGrid";
+import AdminApiService from "../../api/services/admin/AdminApiService";
 
 interface HealthData {
     upstream_id: string;
@@ -29,8 +30,8 @@ function HealthModule() {
 
     async function fetchHealthData() {
         try {
-            const response = await fetch("http://localhost:8001/api/health");
-            const data = await response.json();
+            const response = await AdminApiService.getHealth();
+            const data = response.data;
             setHealthData(data || []);
         } catch (error) {
             console.error("Failed to fetch health data:", error);

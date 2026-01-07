@@ -41,6 +41,18 @@ function upsertRoute(serviceName: string, route: any) {
   });
 }
 
+function getStats() {
+  return HttpRequest.get("/api/stats", {
+    withCredentials: true,
+  });
+}
+
+function getHealth() {
+  return HttpRequest.get("/api/health", {
+    withCredentials: true,
+  });
+}
+
 export default {
   login,
   logout,
@@ -48,4 +60,6 @@ export default {
   getGatewayConfig,
   upsertUpstream,
   upsertRoute,
+  getStats,
+  getHealth,
 };

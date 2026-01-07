@@ -193,7 +193,7 @@ plugins:
 
   - name: http-log
     config:
-      http_endpoint: http://sushi-http-log-consumer:3000/v1/log
+      http_endpoint: http://localhost:3003/v1/log
       method: POST
       content_type: application/json
 
@@ -223,7 +223,7 @@ upstreams:
         http_path: /health
         type: http
     targets:
-      - target: localhost:3001
+      - target: localhost:3002
         weight: 100
 
   - name: dataplane-upstream

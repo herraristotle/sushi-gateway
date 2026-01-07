@@ -37,5 +37,5 @@ Here are the endpoints available in the Admin REST API:
 | `GET`    | `/gateway/config` | Retrieve the gateway environment configuration.          |
 
 ::: tip
-For more detailed information on available endpoints, refer to the **[Admin API Reference](../api/endpoints.md)**.
+For the full list of endpoints and payload formats, refer to the **[Admin API Reference](./admin-api.md)**.
 :::

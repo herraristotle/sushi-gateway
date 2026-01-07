@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import AdminApiService from "../../api/services/admin/AdminApiService";
 
 interface RateLimitStats {
     scope: string;
@@ -20,8 +21,8 @@ function RateLimitCard() {
 
     async function fetchRateLimitStats() {
         try {
-            const response = await fetch("http://localhost:8001/api/stats");
-            const data = await response.json();
+            const response = await AdminApiService.getStats();
+            const data = response.data;
             setRateLimitStats(data.rate_limits || []);
         } catch (error) {
             console.error("Failed to fetch rate limit stats:", error);
