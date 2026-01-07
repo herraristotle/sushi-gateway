@@ -63,20 +63,64 @@ Phases occur in the following order:
 
 ## Available Plugins
 
-Sushi Gateway supports several plugins. Currently, there are **10 plugins** available. The table below provides an overview:
+Sushi Gateway supports **21 plugins** organized into categories. The table below provides a complete overview:
 
-| Plugin Name          | Description                                               | Documentation                                                 |
-| -------------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
-| `bot_protection`     | Protects against automated bots.                          | [Bot Protection Plugin](../plugins/bot-protection.md)         |
-| `cors`               | Manages CORS policies for APIs.                           | [CORS Plugin](../plugins/cors.md)                             |
-| `mtls`               | Implements mutual TLS authentication.                     | [mTLS Plugin](../plugins/mtls.md)                             |
-| `jwt`                | Validates JSON Web Tokens (JWT).                          | [JWT Plugin](../plugins/jwt.md)                               |
-| `key_auth`           | Secures APIs using API Key Authentication.                | [API Key Plugin](../plugins/key-auth.md)                      |
-| `basic_auth`         | Secures routes with basic authentication.                 | [Basic Auth Plugin](../plugins/basic-auth.md)                 |
-| `request_size_limit` | Limits the size of incoming requests.                     | [Request Size Limit Plugin](../plugins/request-size-limit.md) |
-| `acl`                | Manages access control lists for API consumers.           | [Access Control List Plugin](../plugins/acl.md)               |
-| `rate_limit`         | Controls request rates for clients.                       | [Rate Limiting Plugin](../plugins/rate-limit.md)              |
-| `http_log`           | Logs HTTP requests and responses for monitoring purposes. | [HTTP Log Plugin](../plugins/http-log.md)                     |
+### Authentication Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `basic-auth` | Basic HTTP authentication (RFC 7617). | [Basic Auth Plugin](./basic-auth.md) |
+| `jwt` | JSON Web Token validation (RFC 7519). | [JWT Plugin](./jwt.md) |
+| `key-auth` | API Key authentication. | [Key Auth Plugin](./key-auth.md) |
+| `mtls` | Mutual TLS client certificates. | [mTLS Plugin](./mtls.md) |
+| `multi-auth` | Multiple authentication methods. | [Multi-Auth Plugin](./multi-auth.md) |
+
+### Security Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `acl` | IP whitelist/blacklist access control. | [ACL Plugin](./acl.md) |
+| `bot-protection` | Block automated bots. | [Bot Protection Plugin](./bot-protection.md) |
+| `cors` | Cross-Origin Resource Sharing (RFC 6454). | [CORS Plugin](./cors.md) |
+| `rbac` | Role-Based Access Control (Casbin). | [RBAC Plugin](./rbac.md) |
+| `waf` | Web Application Firewall. | [WAF Plugin](./waf.md) |
+| `sanitization` | Input sanitization. | [Sanitization Plugin](./sanitization.md) |
+
+### Traffic Control Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `rate-limiting` | Distributed rate limiting. | [Rate Limit Plugin](./rate-limit.md) |
+| `request-size-limiting` | Limit request body size. | [Request Size Limit Plugin](./request-size-limit.md) |
+| `request-termination` | Block/terminate requests. | [Request Termination Plugin](./request-termination.md) |
+| `circuit-breaker` | Fault tolerance via gobreaker. | [Circuit Breaker Plugin](./circuit-breaker.md) |
+
+### Transformation Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `header-transformation` | Modify request/response headers. | [Header Transformation Plugin](./header-transformation.md) |
+| `request-transformer` | Kong-compatible alias for header-transformation. | [Header Transformation Plugin](./header-transformation.md) |
+
+### Performance Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `cache` | Response caching with Redis. | [Cache Plugin](./cache.md) |
+
+### Observability Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `http-log` | HTTP endpoint logging. | [HTTP Log Plugin](./http-log.md) |
+| `prometheus` | Prometheus metrics. | [Prometheus Plugin](./prometheus.md) |
+| `opentelemetry` | Distributed tracing. | [OpenTelemetry Plugin](./opentelemetry.md) |
+
+### Testing Plugins
+
+| Plugin Name | Description | Documentation |
+|-------------|-------------|---------------|
+| `shadow-traffic` | Traffic mirroring. | [Shadow Traffic Plugin](./shadow-traffic.md) |
 
 ::: tip
 Click on a plugin name to learn more about its configuration and use cases.
